@@ -3,6 +3,7 @@
 import math
 from typing import Any, Dict, List, Optional
 from cable_planner.validation.models import ValidationReport
+from cable_planner.metrics.calculator import calculate_all_metrics
 
 
 def format_official_submission(
@@ -140,4 +141,49 @@ def format_official_submission(
         "units": "m",
         "hubs": hubs_output,
         "reported_metrics": reported_metrics,
+    }
+
+
+def export_solution_in_metres(plan: Dict[str, Any], solution: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the earlier provisional metre export with a lower-left origin."""
+    scale = float(plan["drawing_units_per_metre"])
+    boundary = plan["internal_boundary"]["exterior"]
+    min_x = min(float(point["x"]) for point in boundary)
+    min_y = min(float(point["y"]) for point in boundary)
+
+    def point(value: Dict[str, Any]) -> Dict[str, float]:
+        return {
+            "x": (float(value["x"]) - min_x) / scale,
+            "y": (float(value["y"]) - min_y) / scale,
+        }
+
+    return {
+        "format": "hackhive-provisional-metre-export-v0.1",
+        "plan_id": solution["plan_id"],
+        "coordinate_system": {
+            "unit": "metre",
+            "origin": "internal_boundary_lower_left",
+            "y_axis": "up",
+        },
+        "hubs": [
+            {"id": hub["id"], "room_id": hub["room_id"], "point": point(hub["point"])}
+            for hub in solution.get("hubs", [])
+        ],
+        "assignments": list(solution.get("assignments", [])),
+        "rings": [
+            {
+                "hub_id": ring["hub_id"],
+                "closed_sequence": list(ring["stop_ids"]),
+                "route_segments": [
+                    {
+                        "from_id": leg["from_id"],
+                        "to_id": leg["to_id"],
+                        "polyline": [point(vertex) for vertex in leg["polyline"]],
+                    }
+                    for leg in ring["legs"]
+                ],
+            }
+            for ring in solution.get("rings", [])
+        ],
+        "reported_metrics": calculate_all_metrics(plan, solution).to_dict(),
     }

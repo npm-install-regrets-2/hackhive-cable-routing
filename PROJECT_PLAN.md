@@ -17,7 +17,7 @@ The most accurate literature label is **obstacle-aware capacitated location-rout
 
 Use the following precedence when requirements conflict:
 
-1. The detailed UR Hackathon 2026H2 slides/screenshots, because they define checker behaviour, exact metrics, and updated capacities.
+1. `Cable Ring Challenge - Problem Statement4.pptx` (eight slides and speaker notes), because it defines checker behaviour, exact metrics, updated capacities, hub clearance, and the submission example. The reviewed local copy is alongside this clone, not yet tracked in this repository.
 2. The original cable-routing problem statement in `message.txt` and page 4 of `Problem statements Honeywell.pdf`.
 3. ResPlan documentation and code, which describe the dataset rather than challenge rules.
 4. Project assumptions documented here.
@@ -65,10 +65,11 @@ The uploaded ResPlan pickle does not contain these challenge-specific node point
 - Each hub may own at most 100 m2 of eligible-room area.
 - Each hub may own at most five nodes.
 - Both capacity limits apply simultaneously.
-- Assigned rooms must form a connected territory through legal doors/open passages.
+- Assigned rooms must form a connected territory through legal doors/open passages; windows, wall-only adjacency, and the entrance do not establish connectivity.
+- A hub must lie inside an eligible room assigned to that hub and at least 0.5 m from walls. A hub and node may share a room.
 - Excluded-room polygons cannot contain a hub.
 
-The detailed hub-placement legality and clearance rules are still missing. Until clarified, use a finite, configurable candidate set of legal points inside allowed internal space, away from obstacles and excluded rooms.
+Use a finite, configurable candidate set, but validate every candidate against the confirmed eligible-room, assignment, wall-clearance, and geometry rules. The treatment of non-wall obstacles in hub clearance still needs an explicit policy.
 
 ### 3.4 Rings and physical cable routes
 
@@ -78,7 +79,7 @@ The detailed hub-placement legality and clearance rules are still missing. Until
 - Cable polylines must be axis-aligned: every segment is horizontal or vertical.
 - Cable may move between rooms only through verified doors or open passages.
 - Cable may not cross walls, windows, or exterior space and must remain inside the internal boundary.
-- Entering and leaving a single-door room through the same door is allowed; the retraced geometry counts again toward length and overlap.
+- Entering and leaving a single-door room through the same door is allowed. Both traversals count toward length; only portions on the same geometric line count toward overlap. Parallel out-and-back runs do not overlap.
 
 ### 3.5 Evaluation
 
@@ -97,6 +98,7 @@ Metric definitions:
 - Geometric tolerance is 1 mm: closer points are identical and lines within 1 mm are the same line.
 - The checker recomputes metrics from submitted polylines; claimed metric values in JSON are ignored.
 - Invalid or missing plan output scores zero.
+- Slide 3's unweighted `L + X + O + B` heading is shorthand; slides 6-7 and the slide 1/5 notes give the weighted formula above.
 
 ## 4. Dataset assessment
 
@@ -120,6 +122,7 @@ It is a general spatial-AI dataset, not a challenge-ready cable-routing dataset.
 - If only explicit door-like edges are traversable, 4,249 plans have eligible rooms in multiple components. Adding generic adjacency reduces this to one plan, demonstrating that adjacency mixes important openings with unsafe shared-wall relationships.
 - 124 plans have multipart internal geometry.
 - The raw data includes implausibly small/large declared areas and 448 inferred eligible rooms above 100 m2, but the challenge slides say scored plans are filtered to cases the reference solver can solve and contain no room above 100 m2.
+- The slide 3 notes describe preliminary benchmark filters (eligible rooms between 2 and 100 m2 and room points in one connected free-space component), but explicitly say contiguity-constrained partition feasibility still requires a reference-solver check. Do not assume these filters alone prove feasibility.
 - Eligible-room count ranges from two to ten. With the updated five-node capacity, node count can force additional hubs.
 - The pickle graph and `resplan_utils.py` disagree: the pickle uses `adjacency`, while the utility describes `via_opening` and `fallback`. Treat both as untrusted inputs to normalization.
 
@@ -201,7 +204,7 @@ Portal records should retain both raw and normalized meanings, for example:
 }
 ```
 
-An organizer-provided challenge schema must take precedence over our development schema when released.
+The shared schema is the internal interchange contract: `Plan` and `Solution` coordinates remain in drawing units, with physical measurements in `_m`/`_m2` fields. Slide 8 shows a different, abridged team-submission JSON shape: coordinates in metres (drawing units divided by scale, with a lower-left origin and upward `y`), `hubs` with `closed_sequence` and `route_segments`, and advisory `reported_metrics`. Add a separately tested export adapter that also normalizes the origin/orientation if needed; do not silently relabel the internal JSON as the challenge submission. An organizer-provided machine-readable schema, if released, supersedes both this development contract and any assumptions drawn from the abridged slide example.
 
 ## 7. Detailed implementation plan
 
@@ -209,19 +212,18 @@ An organizer-provided challenge schema must take precedence over our development
 
 Deliverables:
 
-- collect slides 3 and 8 of the detailed challenge deck if available;
-- obtain the official fixed-node input format;
-- obtain the official hub-placement rules and output JSON schema;
-- confirm five versus twenty nodes per hub;
+- retain the reviewed eight-slide deck and its speaker notes as the current rule source;
+- obtain the machine-readable fixed-node input format (the deck confirms fixed points but does not specify their JSON structure);
+- confirm the complete machine-readable submission schema (slide 8 is abridged);
 - confirm whether cable may traverse excluded interior rooms;
-- confirm how open passages are represented and whether hubs require clearance.
+- confirm how open passages are represented in organizer input.
 
 Until resolved, keep these policies configurable and clearly label fallback behaviour in the demo.
 
 Acceptance:
 
 - every unresolved organizer question has a recorded answer or explicit project default;
-- one versioned challenge configuration controls capacity, tolerances, allowed transit spaces, and placement clearance.
+- one versioned challenge configuration controls capacity, tolerances, allowed transit spaces, and the confirmed 0.5 m hub/node wall clearances.
 
 ### Phase 1 - Trusted loader and geometry normalization
 
@@ -281,7 +283,7 @@ Acceptance:
 Implement:
 
 - finite candidate generation only in legally allowed internal space;
-- candidate reachability and clearance validation;
+- candidate reachability, eligible-room ownership, and 0.5 m wall-clearance validation;
 - lower bound `max(ceil(total_area/100), ceil(node_count/5))`;
 - CP-SAT variables for opened hubs and exclusive room assignments;
 - both capacity constraints;
@@ -369,6 +371,7 @@ Implement a validator separate from the optimizer that checks:
 - exactly one node per eligible polygon;
 - exactly one room/node assignment;
 - hub eligibility and capacity;
+- hub containment in its own assigned eligible room and 0.5 m wall clearance;
 - territory connectivity;
 - ring closure, non-branching, and exactly-once visits;
 - axis alignment;
@@ -390,6 +393,7 @@ The Streamlit interface should provide:
 Acceptance:
 
 - the visual and JSON describe the identical solution;
+- the metre-coordinate submission adapter reproduces the checked drawing-unit geometry and lengths;
 - invalid outputs identify the exact failed rule;
 - metrics shown in the UI come from the validator, not solver claims.
 
@@ -420,6 +424,7 @@ Acceptance:
 - door contact versus corner contact;
 - window/shared-wall rejection;
 - node containment and clearance;
+- hub containment, assigned-room ownership, and 0.5 m wall clearance;
 - axis alignment and obstacle collision;
 - crossing, overlap multiplicity, bend, reversal, and 1 mm tolerance;
 - lower-bound and capacity arithmetic.
@@ -440,6 +445,8 @@ Acceptance:
 - assignment satisfying capacity but violating territory connectivity;
 - crossing within one ring and between rings;
 - collinear overlap versus parallel non-overlap;
+- a straight out-and-back ring whose reversals at its node and hub each count as a bend;
+- room-boundary crossing through a wall with no verified portal, even if the path avoids recorded obstacle polygons;
 - path whose simplification would cut through a wall;
 - unreachable node pair forbidden in TSP.
 
@@ -466,11 +473,21 @@ For each accepted plan:
 
 ## 9. Risk register
 
+The 2026-10-15 deck/code audit found these *current implementation gaps*, not
+changes to the challenge formulas: Priyanshu's thin slice reports `X = O = 0`
+and counts only bends inside individual legs; Sana's checker recomputes the
+metrics, but it does not yet enforce hub wall clearance, hub-room ownership by
+its territory, or portal-only transitions for every cable boundary crossing.
+The development `Solution` also needs the metre-coordinate submission adapter
+described above. Passing current tests or the current checker is therefore not
+yet proof that an output satisfies every rule on slide 3.
+
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Five-versus-twenty capacity conflict | Wrong hub count | Configurable rule; seek organizer confirmation; default to detailed slides |
 | Missing official fixed nodes | Different challenge instances | Loader-first interface plus clearly labelled deterministic fallback |
-| Undefined hub-placement rules | Invalid candidate locations | Configurable candidate policy; obtain missing hard-rule slide |
+| Hub clearance or assigned-room ownership omitted in code | Invalid candidate locations | Enforce the slide 3 rule in candidate generation and independent validation |
+| Internal drawing-unit JSON mistaken for the metre-based submission | Invalid output | Add a distinct slide-8 export adapter and validate its coordinate/length conversion |
 | Ambiguous ResPlan adjacency | Wall-crossing or false disconnection | Geometric portal reconstruction; never trust adjacency directly |
 | Invalid polygon repair changes semantics | Incorrect rooms/obstacles | Audit area/topology changes and reject unsafe repairs |
 | Grid resolution misses narrow doors | False unreachable paths | Scale-aware resolution, explicit portal injection, multi-resolution retry |
@@ -493,6 +510,7 @@ For each accepted plan:
 - Overlap is permitted and penalized, never globally forbidden.
 - A* output is four-directional and axis-aligned.
 - Hubs come from a finite candidate set inside allowed internal space and outside excluded rooms.
+- Hub candidates must be inside an eligible room assigned to that hub and at least 0.5 m from walls; this is a confirmed rule, not an open assumption.
 - The raw ResPlan test split is not assumed to be the official challenge benchmark.
 
 ## 11. Definition of done
@@ -506,7 +524,7 @@ The prototype is complete when it can take an unseen, challenge-valid ResPlan in
 5. generate one legal closed axis-aligned ring per hub;
 6. independently validate every hard rule;
 7. compute `H`, `L`, `X`, `O`, `B`, `J`, and area gap with 1 mm tolerance;
-8. export matching JSON and a clear visual overlay;
+8. export the slide-8 metre-coordinate submission JSON through a tested adapter and a matching visual overlay;
 9. provide explicit diagnostics rather than silently emitting a partial solution;
 10. reproduce the run in Docker with deterministic configuration and recorded solver limits.
 
@@ -514,7 +532,8 @@ The prototype is complete when it can take an unseen, challenge-valid ResPlan in
 
 - Original statement: `message.txt`
 - General Honeywell overview: `Problem statements Honeywell.pdf`
-- Detailed rule screenshots: the five `WhatsApp Image 2026-10-15 ...` files in the repository root
+- Detailed eight-slide deck and notes: `Cable Ring Challenge - Problem Statement4.pptx` (reviewed local copy alongside this clone; not tracked here)
+- Earlier detailed rule screenshots: the five `WhatsApp Image 2026-10-15 ...` files in the repository root
 - Dataset and utilities: `archive/`
 - Literature review: `research/related-work.md`
 - Canonical terminology: `CONTEXT.md`
