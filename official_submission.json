@@ -1,0 +1,85 @@
+{
+  "plan_id": "101",
+  "units": "m",
+  "hubs": [
+    {
+      "hub_id": "hub:1",
+      "room_id": "room:bedroom:000",
+      "location": {
+        "x": 7.5,
+        "y": 2.5
+      },
+      "assigned_rooms": [
+        "room:bedroom:000",
+        "room:living:000"
+      ],
+      "assigned_nodes": [
+        "node:bedroom:000",
+        "node:living:000"
+      ],
+      "closed_sequence": [
+        "hub:1",
+        "node:bedroom:000",
+        "node:living:000",
+        "hub:1"
+      ],
+      "route_segments": [
+        {
+          "from": "hub:1",
+          "to": "node:bedroom:000",
+          "length_m": 0.0,
+          "polyline": [
+            [
+              7.5,
+              2.5
+            ],
+            [
+              7.5,
+              2.5
+            ]
+          ]
+        },
+        {
+          "from": "node:bedroom:000",
+          "to": "node:living:000",
+          "length_m": 5.0,
+          "polyline": [
+            [
+              7.5,
+              2.5
+            ],
+            [
+              2.5,
+              2.5
+            ]
+          ]
+        },
+        {
+          "from": "node:living:000",
+          "to": "hub:1",
+          "length_m": 5.0,
+          "polyline": [
+            [
+              2.5,
+              2.5
+            ],
+            [
+              7.5,
+              2.5
+            ]
+          ]
+        }
+      ],
+      "ring_length_m": 10.0
+    }
+  ],
+  "reported_metrics": {
+    "hub_count": 1,
+    "total_length_m": 10.0,
+    "crossings": 0,
+    "overlap_m": 5.0,
+    "bends": 2,
+    "route_cost": 16.0,
+    "area_gap_m2": 0.0
+  }
+}

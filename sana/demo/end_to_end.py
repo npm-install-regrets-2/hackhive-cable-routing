@@ -75,16 +75,19 @@ def run_full_pipeline(
         raise ValueError("Must provide either raw_dict or plan_dict")
 
     # Step 2: Optimization (Priyanshu)
-    # The initial thin-slice solver handles obstacle-free portal routes; pass clean copy for thin-slice
+    # Uses obstacle-aware rectilinear Hanan-grid solver with fallback
     try:
-        from solver.thin_slice import solve
-        solve_input = copy.deepcopy(plan)
-        if solve_input.get("obstacles"):
-            # Provide obstacle-free view for thin-slice solver
-            solve_input["obstacles"] = []
-        solution = solve(solve_input)
-    except ImportError as e:
-        raise ImportError(f"Could not import Priyanshu's solver: {e}")
+        from solver.grid_router import solve as solve_grid
+        solution = solve_grid(plan)
+    except Exception as e:
+        try:
+            from solver.thin_slice import solve as solve_thin
+            solve_input = copy.deepcopy(plan)
+            if solve_input.get("obstacles"):
+                solve_input["obstacles"] = []
+            solution = solve_thin(solve_input)
+        except Exception:
+            raise e
 
     # Step 3: Independent Hard-Rule Validation & Metric Recomputation (Sana)
     validator = IndependentValidator()

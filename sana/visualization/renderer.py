@@ -117,12 +117,20 @@ def render_solution_overlay(
             ax.add_patch(o_patch)
 
     # 5. Draw Cable Rings
+    # Build stop order mapping: entity_id -> stop_index
+    stop_order_map: Dict[str, List[int]] = {}
     rings = solution.get("rings", [])
+    for ring in rings:
+        for idx, s_id in enumerate(ring.get("stop_ids", [])):
+            stop_order_map.setdefault(s_id, []).append(idx)
+
+    # 5. Draw Cable Rings
     for ring in rings:
         r_hub_id = ring.get("hub_id")
         cable_color = hub_color_map.get(r_hub_id, "#E63946")
+        legs = ring.get("legs", [])
 
-        for leg_idx, leg in enumerate(ring.get("legs", [])):
+        for leg_idx, leg in enumerate(legs):
             pts = [(float(p["x"]), float(p["y"])) for p in leg.get("polyline", [])]
             if len(pts) < 2:
                 continue
@@ -130,10 +138,15 @@ def render_solution_overlay(
             lx = [p[0] for p in pts]
             ly = [p[1] for p in pts]
 
-            # Route polyline with slight glow effect
-            ax.plot(lx, ly, color=cable_color, linewidth=2.8, alpha=0.9, zorder=5)
+            # Route polyline: contrasting white casing + vibrant core cable
+            ax.plot(lx, ly, color="white", linewidth=4.8, alpha=0.95, zorder=5, solid_capstyle="round", solid_joinstyle="round")
+            ax.plot(lx, ly, color=cable_color, linewidth=2.8, alpha=0.95, zorder=6, solid_capstyle="round", solid_joinstyle="round")
 
-            # Draw directional arrows along each segment
+            # Find longest segment to host sequence badge
+            longest_seg_idx = 0
+            max_seg_len = 0.0
+
+            # Draw directional arrows along segments
             for s in range(len(pts) - 1):
                 p1, p2 = pts[s], pts[s + 1]
                 mid_x = (p1[0] + p2[0]) / 2.0
@@ -141,23 +154,47 @@ def render_solution_overlay(
                 dx = p2[0] - p1[0]
                 dy = p2[1] - p1[1]
                 dist = math.hypot(dx, dy)
-                if dist > 2.0:
+                if dist > max_seg_len:
+                    max_seg_len = dist
+                    longest_seg_idx = s
+
+                if dist > 3.0:
                     ax.annotate(
                         "",
-                        xy=(mid_x + dx * 0.1, mid_y + dy * 0.1),
-                        xytext=(mid_x - dx * 0.1, mid_y - dy * 0.1),
-                        arrowprops=dict(arrowstyle="->", color=cable_color, lw=2.0, mutation_scale=12),
-                        zorder=6,
+                        xy=(mid_x + dx * 0.12, mid_y + dy * 0.12),
+                        xytext=(mid_x - dx * 0.12, mid_y - dy * 0.12),
+                        arrowprops=dict(arrowstyle="->", color=cable_color, lw=2.2, mutation_scale=13),
+                        zorder=7,
                     )
+
+            # Draw leg sequence badge [1], [2], ... on longest segment
+            if max_seg_len > 2.0:
+                p1, p2 = pts[longest_seg_idx], pts[longest_seg_idx + 1]
+                badge_x = (p1[0] + p2[0]) / 2.0
+                badge_y = (p1[1] + p2[1]) / 2.0
+                # Slight perpendicular offset for readability
+                nx = -(p2[1] - p1[1]) / max_seg_len
+                ny = (p2[0] - p1[0]) / max_seg_len
+                bx = badge_x + nx * 1.5
+                by = badge_y + ny * 1.5
+                ax.text(
+                    bx, by, f"#{leg_idx + 1}",
+                    fontsize=7.5, weight="bold", color="white", ha="center", va="center",
+                    bbox=dict(boxstyle="circle,pad=0.25", facecolor=cable_color, edgecolor="white", lw=1.2),
+                    zorder=8,
+                )
 
     # 6. Draw Fixed Nodes
     for node in plan.get("nodes", []):
         n_id = node.get("id")
         nx_val = float(node["point"]["x"])
         ny_val = float(node["point"]["y"])
-        ax.scatter(nx_val, ny_val, s=180, color="#FFB703", edgecolor="#D48B00", linewidth=2.0, zorder=10)
+        order_list = stop_order_map.get(n_id, [])
+        order_str = f" [Stop {order_list[0]}]" if order_list else ""
+
+        ax.scatter(nx_val, ny_val, s=200, color="#FFB703", edgecolor="#D48B00", linewidth=2.2, zorder=10)
         ax.text(
-            nx_val + 1.2, ny_val + 1.2, f"Node: {n_id}",
+            nx_val + 1.5, ny_val - 2.2, f"{n_id}{order_str}",
             fontsize=8, weight="bold", color="#1F2421",
             path_effects=[pe.withStroke(linewidth=3, foreground="white")],
             zorder=11,
@@ -169,9 +206,9 @@ def render_solution_overlay(
         hx_val = float(hub["point"]["x"])
         hy_val = float(hub["point"]["y"])
         h_color = hub_color_map.get(h_id, "#E63946")
-        ax.scatter(hx_val, hy_val, s=320, marker="*", color=h_color, edgecolor="#1B263B", linewidth=2.2, zorder=12)
+        ax.scatter(hx_val, hy_val, s=360, marker="*", color=h_color, edgecolor="#1B263B", linewidth=2.4, zorder=12)
         ax.text(
-            hx_val + 1.5, hy_val - 1.8, f"Hub: {h_id}",
+            hx_val + 2.0, hy_val + 2.5, f"★ Hub: {h_id} (Loop Start/End)",
             fontsize=9, weight="bold", color=h_color,
             path_effects=[pe.withStroke(linewidth=3.5, foreground="white")],
             zorder=13,
