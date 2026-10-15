@@ -7,6 +7,7 @@ This repository is split into two temporary developer workspaces. Keep implement
 - Read `PROJECT_PLAN.md` before changing behavior or constraints.
 - Read `CONTEXT.md` before naming domain objects. Use `hub`, `node`, `territory`, `portal`, `ring`, and `leg` as defined there.
 - Read `shared/schema/common.schema.json` before producing or consuming plan or solution JSON. It is the development interchange contract; an organizer-provided schema supersedes it.
+- Read `docs/README.md` before implementation. Update your progress log after each meaningful implementation step so the other developer can resume from it.
 - Treat capacities and tolerances as configuration. The current defaults are 100 m² and five nodes per hub.
 
 ## Ownership
@@ -44,4 +45,4 @@ Before editing the schema, state the producer, consumer, compatibility effect, a
 
 ## Definition of done
 
-A change is complete when its owned tests pass, emitted JSON validates against the shared schema, terminology matches `CONTEXT.md`, and any assumption not confirmed by the challenge material is configurable and documented.
+A change is complete when its owned tests pass, emitted JSON validates against the shared schema, terminology matches `CONTEXT.md`, any assumption not confirmed by the challenge material is configurable and documented, and its progress log is current.
