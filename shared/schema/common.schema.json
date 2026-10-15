@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/npm-install-regrets-2/hackhive-cable-routing/blob/main/shared/schema/common.schema.json",
+  "title": "HackHive cable-routing development interchange",
+  "description": "Temporary common contract for normalized ResPlan inputs and cable-routing solutions. Replace or adapt it when the organizer publishes an official schema.",
+  "type": "object",
+  "required": ["schema_version", "plan", "solution"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "0.1.0" },
+    "plan": { "$ref": "#/$defs/plan" },
+    "solution": { "$ref": "#/$defs/solution" }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "point": {
+      "type": "object",
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "polyline": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/point" }
+    },
+    "polygon": {
+      "type": "object",
+      "required": ["exterior"],
+      "additionalProperties": false,
+      "properties": {
+        "exterior": {
+          "type": "array",
+          "minItems": 4,
+          "items": { "$ref": "#/$defs/point" },
+          "description": "Closed boundary in drawing units; first and last points must match."
+        },
+        "holes": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "array",
+            "minItems": 4,
+            "items": { "$ref": "#/$defs/point" }
+          }
+        }
+      }
+    },
+    "room": {
+      "type": "object",
+      "required": ["id", "source_label", "kind", "eligible", "geometry", "area_m2"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "source_label": { "type": "string", "minLength": 1 },
+        "kind": {
+          "enum": ["living", "bedroom", "kitchen", "storage", "bathroom", "balcony", "stair", "garden", "pool", "parking", "land", "other"]
+        },
+        "eligible": { "type": "boolean" },
+        "geometry": { "$ref": "#/$defs/polygon" },
+        "area_m2": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "room_id", "point", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "room_id": { "$ref": "#/$defs/id" },
+        "point": { "$ref": "#/$defs/point" },
+        "source": { "enum": ["organizer", "development_fallback"] }
+      }
+    },
+    "portal": {
+      "type": "object",
+      "required": ["id", "space_a_id", "space_b_id", "kind", "segment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "space_a_id": { "$ref": "#/$defs/id" },
+        "space_b_id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["door", "open_passage"] },
+        "segment": { "$ref": "#/$defs/polyline" }
+      }
+    },
+    "obstacle": {
+      "type": "object",
+      "required": ["id", "kind", "geometry"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["wall", "window", "external_area"] },
+        "geometry": {
+          "oneOf": [
+            { "$ref": "#/$defs/polyline" },
+            { "$ref": "#/$defs/polygon" }
+          ]
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "required": ["max_area_m2_per_hub", "max_nodes_per_hub", "node_wall_clearance_m", "geometry_tolerance"],
+      "additionalProperties": false,
+      "properties": {
+        "max_area_m2_per_hub": { "type": "number", "exclusiveMinimum": 0, "default": 100 },
+        "max_nodes_per_hub": { "type": "integer", "minimum": 1, "default": 5 },
+        "node_wall_clearance_m": { "type": "number", "minimum": 0, "default": 0.5 },
+        "geometry_tolerance": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "required": ["id", "drawing_units_per_metre", "internal_boundary", "rooms", "nodes", "portals", "obstacles", "rules"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "drawing_units_per_metre": { "type": "number", "exclusiveMinimum": 0 },
+        "internal_boundary": { "$ref": "#/$defs/polygon" },
+        "rooms": { "type": "array", "items": { "$ref": "#/$defs/room" } },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+        "portals": { "type": "array", "items": { "$ref": "#/$defs/portal" } },
+        "obstacles": { "type": "array", "items": { "$ref": "#/$defs/obstacle" } },
+        "rules": { "$ref": "#/$defs/rules" }
+      }
+    },
+    "hub": {
+      "type": "object",
+      "required": ["id", "point", "room_id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "point": { "$ref": "#/$defs/point" },
+        "room_id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "assignment": {
+      "type": "object",
+      "required": ["room_id", "node_id", "hub_id"],
+      "additionalProperties": false,
+      "properties": {
+        "room_id": { "$ref": "#/$defs/id" },
+        "node_id": { "$ref": "#/$defs/id" },
+        "hub_id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "leg": {
+      "type": "object",
+      "required": ["from_id", "to_id", "polyline"],
+      "additionalProperties": false,
+      "properties": {
+        "from_id": { "$ref": "#/$defs/id" },
+        "to_id": { "$ref": "#/$defs/id" },
+        "polyline": { "$ref": "#/$defs/polyline" }
+      }
+    },
+    "ring": {
+      "type": "object",
+      "required": ["hub_id", "stop_ids", "legs"],
+      "additionalProperties": false,
+      "properties": {
+        "hub_id": { "$ref": "#/$defs/id" },
+        "stop_ids": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/id" },
+          "description": "Closed order: first and last values are the same hub ID; intervening values are assigned node IDs exactly once."
+        },
+        "legs": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/leg" } }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/id" },
+        "message": { "type": "string", "minLength": 1 },
+        "entity_ids": { "type": "array", "items": { "$ref": "#/$defs/id" }, "default": [] }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["hub_count", "length_m", "crossings", "overlap_m", "bends", "route_cost", "area_gap_m2"],
+      "additionalProperties": false,
+      "properties": {
+        "hub_count": { "type": "integer", "minimum": 0 },
+        "length_m": { "type": "number", "minimum": 0 },
+        "crossings": { "type": "integer", "minimum": 0 },
+        "overlap_m": { "type": "number", "minimum": 0 },
+        "bends": { "type": "integer", "minimum": 0 },
+        "route_cost": { "type": "number", "minimum": 0 },
+        "area_gap_m2": { "type": "number", "minimum": 0 }
+      },
+      "description": "Advisory values only; the independent validator recomputes them from geometry."
+    },
+    "solution": {
+      "type": "object",
+      "required": ["plan_id", "status", "hubs", "assignments", "rings", "diagnostics"],
+      "additionalProperties": false,
+      "properties": {
+        "plan_id": { "$ref": "#/$defs/id" },
+        "status": { "enum": ["feasible", "best_known", "infeasible", "error"] },
+        "lower_bound_hubs": { "type": "integer", "minimum": 0 },
+        "hubs": { "type": "array", "items": { "$ref": "#/$defs/hub" } },
+        "assignments": { "type": "array", "items": { "$ref": "#/$defs/assignment" } },
+        "rings": { "type": "array", "items": { "$ref": "#/$defs/ring" } },
+        "metrics": { "$ref": "#/$defs/metrics" },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } }
+      }
+    }
+  }
+}
