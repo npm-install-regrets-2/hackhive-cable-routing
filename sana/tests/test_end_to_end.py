@@ -19,12 +19,14 @@ def test_full_pipeline_with_raw_resplan_synthetic(tmp_path):
     }
 
     render_file = str(tmp_path / "pipeline_overlay.png")
-    export_file = str(tmp_path / "pipeline_combined.json")
+    export_combined = str(tmp_path / "pipeline_combined.json")
+    export_official = str(tmp_path / "pipeline_official.json")
 
     plan, solution, report = run_full_pipeline(
         raw_dict=raw_input,
         render_path=render_file,
-        export_json_path=export_file,
+        export_combined_path=export_combined,
+        export_official_path=export_official,
     )
 
     assert plan is not None
@@ -37,3 +39,4 @@ def test_full_pipeline_with_raw_resplan_synthetic(tmp_path):
     assert report.recomputed_metrics.hub_count == 1
     assert (tmp_path / "pipeline_overlay.png").exists()
     assert (tmp_path / "pipeline_combined.json").exists()
+    assert (tmp_path / "pipeline_official.json").exists()
