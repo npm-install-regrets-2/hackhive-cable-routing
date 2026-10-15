@@ -1,0 +1,100 @@
+{
+  "id": "plan_canonical_01",
+  "drawing_units_per_metre": 10.0,
+  "internal_boundary": {
+    "exterior": [
+      { "x": 0.0, "y": 0.0 },
+      { "x": 100.0, "y": 0.0 },
+      { "x": 100.0, "y": 50.0 },
+      { "x": 0.0, "y": 50.0 },
+      { "x": 0.0, "y": 0.0 }
+    ],
+    "holes": []
+  },
+  "rooms": [
+    {
+      "id": "room_living",
+      "source_label": "living_0",
+      "kind": "living",
+      "eligible": true,
+      "geometry": {
+        "exterior": [
+          { "x": 0.0, "y": 0.0 },
+          { "x": 60.0, "y": 0.0 },
+          { "x": 60.0, "y": 50.0 },
+          { "x": 0.0, "y": 50.0 },
+          { "x": 0.0, "y": 0.0 }
+        ],
+        "holes": []
+      },
+      "area_m2": 30.0
+    },
+    {
+      "id": "room_bedroom",
+      "source_label": "bedroom_0",
+      "kind": "bedroom",
+      "eligible": true,
+      "geometry": {
+        "exterior": [
+          { "x": 60.0, "y": 0.0 },
+          { "x": 100.0, "y": 0.0 },
+          { "x": 100.0, "y": 50.0 },
+          { "x": 60.0, "y": 50.0 },
+          { "x": 60.0, "y": 0.0 }
+        ],
+        "holes": []
+      },
+      "area_m2": 20.0
+    }
+  ],
+  "nodes": [
+    {
+      "id": "node_living",
+      "room_id": "room_living",
+      "point": { "x": 20.0, "y": 25.0 },
+      "source": "development_fallback"
+    },
+    {
+      "id": "node_bedroom",
+      "room_id": "room_bedroom",
+      "point": { "x": 80.0, "y": 25.0 },
+      "source": "development_fallback"
+    }
+  ],
+  "portals": [
+    {
+      "id": "portal_door_1",
+      "space_a_id": "room_living",
+      "space_b_id": "room_bedroom",
+      "kind": "door",
+      "segment": [
+        { "x": 60.0, "y": 20.0 },
+        { "x": 60.0, "y": 30.0 }
+      ]
+    }
+  ],
+  "obstacles": [
+    {
+      "id": "wall_shared_lower",
+      "kind": "wall",
+      "geometry": [
+        { "x": 60.0, "y": 0.0 },
+        { "x": 60.0, "y": 20.0 }
+      ]
+    },
+    {
+      "id": "wall_shared_upper",
+      "kind": "wall",
+      "geometry": [
+        { "x": 60.0, "y": 30.0 },
+        { "x": 60.0, "y": 50.0 }
+      ]
+    }
+  ],
+  "rules": {
+    "max_area_m2_per_hub": 100.0,
+    "max_nodes_per_hub": 5,
+    "node_wall_clearance_m": 0.5,
+    "geometry_tolerance": 0.001
+  }
+}

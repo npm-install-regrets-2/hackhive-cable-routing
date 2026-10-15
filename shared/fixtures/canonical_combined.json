@@ -1,0 +1,174 @@
+{
+  "schema_version": "0.1.0",
+  "plan": {
+    "id": "plan_canonical_01",
+    "drawing_units_per_metre": 10.0,
+    "internal_boundary": {
+      "exterior": [
+        { "x": 0.0, "y": 0.0 },
+        { "x": 100.0, "y": 0.0 },
+        { "x": 100.0, "y": 50.0 },
+        { "x": 0.0, "y": 50.0 },
+        { "x": 0.0, "y": 0.0 }
+      ],
+      "holes": []
+    },
+    "rooms": [
+      {
+        "id": "room_living",
+        "source_label": "living_0",
+        "kind": "living",
+        "eligible": true,
+        "geometry": {
+          "exterior": [
+            { "x": 0.0, "y": 0.0 },
+            { "x": 60.0, "y": 0.0 },
+            { "x": 60.0, "y": 50.0 },
+            { "x": 0.0, "y": 50.0 },
+            { "x": 0.0, "y": 0.0 }
+          ],
+          "holes": []
+        },
+        "area_m2": 30.0
+      },
+      {
+        "id": "room_bedroom",
+        "source_label": "bedroom_0",
+        "kind": "bedroom",
+        "eligible": true,
+        "geometry": {
+          "exterior": [
+            { "x": 60.0, "y": 0.0 },
+            { "x": 100.0, "y": 0.0 },
+            { "x": 100.0, "y": 50.0 },
+            { "x": 60.0, "y": 50.0 },
+            { "x": 60.0, "y": 0.0 }
+          ],
+          "holes": []
+        },
+        "area_m2": 20.0
+      }
+    ],
+    "nodes": [
+      {
+        "id": "node_living",
+        "room_id": "room_living",
+        "point": { "x": 20.0, "y": 25.0 },
+        "source": "development_fallback"
+      },
+      {
+        "id": "node_bedroom",
+        "room_id": "room_bedroom",
+        "point": { "x": 80.0, "y": 25.0 },
+        "source": "development_fallback"
+      }
+    ],
+    "portals": [
+      {
+        "id": "portal_door_1",
+        "space_a_id": "room_living",
+        "space_b_id": "room_bedroom",
+        "kind": "door",
+        "segment": [
+          { "x": 60.0, "y": 20.0 },
+          { "x": 60.0, "y": 30.0 }
+        ]
+      }
+    ],
+    "obstacles": [
+      {
+        "id": "wall_shared_lower",
+        "kind": "wall",
+        "geometry": [
+          { "x": 60.0, "y": 0.0 },
+          { "x": 60.0, "y": 20.0 }
+        ]
+      },
+      {
+        "id": "wall_shared_upper",
+        "kind": "wall",
+        "geometry": [
+          { "x": 60.0, "y": 30.0 },
+          { "x": 60.0, "y": 50.0 }
+        ]
+      }
+    ],
+    "rules": {
+      "max_area_m2_per_hub": 100.0,
+      "max_nodes_per_hub": 5,
+      "node_wall_clearance_m": 0.5,
+      "geometry_tolerance": 0.001
+    }
+  },
+  "solution": {
+    "plan_id": "plan_canonical_01",
+    "status": "feasible",
+    "lower_bound_hubs": 1,
+    "hubs": [
+      {
+        "id": "hub_1",
+        "point": { "x": 10.0, "y": 10.0 },
+        "room_id": "room_living"
+      }
+    ],
+    "assignments": [
+      {
+        "room_id": "room_living",
+        "node_id": "node_living",
+        "hub_id": "hub_1"
+      },
+      {
+        "room_id": "room_bedroom",
+        "node_id": "node_bedroom",
+        "hub_id": "hub_1"
+      }
+    ],
+    "rings": [
+      {
+        "hub_id": "hub_1",
+        "stop_ids": ["hub_1", "node_living", "node_bedroom", "hub_1"],
+        "legs": [
+          {
+            "from_id": "hub_1",
+            "to_id": "node_living",
+            "polyline": [
+              { "x": 10.0, "y": 10.0 },
+              { "x": 10.0, "y": 25.0 },
+              { "x": 20.0, "y": 25.0 }
+            ]
+          },
+          {
+            "from_id": "node_living",
+            "to_id": "node_bedroom",
+            "polyline": [
+              { "x": 20.0, "y": 25.0 },
+              { "x": 60.0, "y": 25.0 },
+              { "x": 80.0, "y": 25.0 }
+            ]
+          },
+          {
+            "from_id": "node_bedroom",
+            "to_id": "hub_1",
+            "polyline": [
+              { "x": 80.0, "y": 25.0 },
+              { "x": 60.0, "y": 25.0 },
+              { "x": 20.0, "y": 25.0 },
+              { "x": 20.0, "y": 10.0 },
+              { "x": 10.0, "y": 10.0 }
+            ]
+          }
+        ]
+      }
+    ],
+    "metrics": {
+      "hub_count": 1,
+      "length_m": 17.0,
+      "crossings": 0,
+      "overlap_m": 6.0,
+      "bends": 5,
+      "route_cost": 25.5,
+      "area_gap_m2": 0.0
+    },
+    "diagnostics": []
+  }
+}
