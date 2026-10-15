@@ -29,3 +29,19 @@ The first fixture-scale implementation lives in `solver/thin_slice.py`. It:
 This implementation intentionally accepts only obstacle-free normalized plans.
 It is a proof-oriented integration slice, not the production-scale optimizer or
 Harshit's future geometry kernel. From this directory, run it with `uv run pytest`.
+
+## Deck-alignment work remaining
+
+The reviewed eight-slide challenge deck makes hub placement stricter than the
+thin slice currently proves: each hub must be inside an eligible room assigned
+to it and at least 0.5 m from walls. Candidate generation and the independent
+checker must enforce this before a result can be called challenge-valid. The
+thin slice's `metrics` are advisory: it currently reports zero crossings and
+overlap and misses bends at leg joins, nodes, and hubs. Use Sana's independently
+recomputed metrics for review, and do not claim an optimal `J` from this slice.
+
+The shared `Solution` uses drawing-unit points. Slide 8's abridged team-output
+example requires metre-coordinate locations and polylines, so it needs a
+separate, checked export adapter; a schema-valid development `Solution` is not
+itself a submission file. Keep fixed organizer nodes immutable; development
+fallback nodes must remain clearly labelled.
