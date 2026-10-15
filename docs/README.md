@@ -8,6 +8,9 @@ Before finishing a coding session or commit, append an entry to your own log:
 
 - Harshit: `docs/progress/harshit.md`
 - Priyanshu: `docs/progress/priyanshu.md`
+- Sana: `docs/progress/sana.md`
+
+For ownership, first parallel tasks, handoffs, and pull request review, see `docs/workstreams.md`.
 
 A meaningful step is a completed or attempted deliverable such as a parser, validation rule, routing method, fixture, experiment, or interface change. Record unsuccessful attempts when they affect the next decision. Group tiny edits that serve the same deliverable into one entry.
 

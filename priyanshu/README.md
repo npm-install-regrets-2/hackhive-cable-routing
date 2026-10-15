@@ -11,4 +11,4 @@ Start with these modules when implementation begins:
 - `improvement/`: fixed-hub-count optimization of route cost and area gap
 - `tests/`: fixtures and tests for all owned behavior
 
-The workspace must consume normalized plans and emit solutions through `../shared/schema/common.schema.json`. Do not import validator or ingestion internals from `../harshit/`.
+Consume normalized `Plan` data and emit `Solution` data through `../shared/schema/common.schema.json`. Use shared fixtures while Harshit's loader is in progress. Sana independently checks the result; keep claimed metrics advisory. Log each meaningful step in `../docs/progress/priyanshu.md`.
