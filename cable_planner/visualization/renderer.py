@@ -5,7 +5,8 @@ from typing import Any, Dict, Optional, Tuple
 import matplotlib
 matplotlib.use("Agg")  # Non-interactive backend
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon as MplPolygon, FancyArrowPatch
+from matplotlib.patches import Polygon as MplPolygon, Patch
+from matplotlib.lines import Line2D
 import matplotlib.patheffects as pe
 
 from cable_planner.validation.models import ValidationReport
@@ -23,6 +24,13 @@ TERRITORY_COLORS = [
     "#FB8500",  # Orange
 ]
 
+ROOM_TYPE_COLORS = {
+    "living": "#A8DADC", "bedroom": "#CDB4DB", "kitchen": "#FFD6A5",
+    "storage": "#BDE0FE", "bathroom": "#D9E2F2", "balcony": "#CAFFBF",
+    "stair": "#E9C46A", "garden": "#95D5B2", "pool": "#48CAE4",
+    "parking": "#ADB5BD", "land": "#D8F3DC", "other": "#DEE2E6",
+}
+
 
 def render_input_plan(
     plan: Dict[str, Any], figsize: Tuple[int, int] = (12, 10), dpi: int = 200
@@ -35,7 +43,7 @@ def render_input_plan(
         exterior = [(p["x"], p["y"]) for p in room["geometry"]["exterior"]]
         if not exterior:
             continue
-        color = "#E0E1DD" if room.get("eligible", False) else "#D3D3D3"
+        color = ROOM_TYPE_COLORS.get(room.get("kind", "other"), ROOM_TYPE_COLORS["other"])
         ax.add_patch(MplPolygon(exterior, closed=True, facecolor=color, edgecolor="#6C757D", alpha=0.5))
         cx = sum(p[0] for p in exterior) / len(exterior)
         cy = sum(p[1] for p in exterior) / len(exterior)
@@ -59,12 +67,16 @@ def render_input_plan(
     for portal in plan.get("portals", []):
         points = portal.get("segment", [])
         if len(points) >= 2:
-            ax.plot([p["x"] for p in points], [p["y"] for p in points], color="#06D6A0", linewidth=4)
+            kind = portal.get("kind", "door")
+            color = "#06D6A0" if kind == "door" else "#118AB2"
+            ax.plot([p["x"] for p in points], [p["y"] for p in points], color=color, linewidth=4)
 
     for node in plan.get("nodes", []):
         point = node["point"]
         ax.scatter(point["x"], point["y"], s=140, color="#FFB703", edgecolor="#D48B00", zorder=5)
         ax.text(point["x"] + 1.5, point["y"] - 2.2, node["id"], fontsize=8, zorder=6)
+
+    _add_floorplan_legend(ax, plan)
 
     ax.set_title(f"Plan: {plan.get('id', 'N/A')} — Normalized Input", fontsize=12, weight="bold", pad=12)
     ax.grid(True, linestyle=":", alpha=0.4)
@@ -113,17 +125,11 @@ def render_solution_overlay(
             continue
 
         assigned_hub = room_to_hub.get(r_id)
-        if assigned_hub and assigned_hub in hub_color_map:
-            face_color = hub_color_map[assigned_hub]
-            alpha = 0.22
-        elif eligible:
-            face_color = "#E0E1DD"
-            alpha = 0.15
-        else:
-            face_color = "#D3D3D3"
-            alpha = 0.10
-
-        patch = MplPolygon(exterior, closed=True, facecolor=face_color, edgecolor="#6C757D", linewidth=1.2, alpha=alpha)
+        face_color = ROOM_TYPE_COLORS.get(kind, ROOM_TYPE_COLORS["other"])
+        edge_color = hub_color_map.get(assigned_hub, "#6C757D")
+        edge_width = 2.2 if assigned_hub in hub_color_map else 1.0
+        alpha = 0.46 if eligible else 0.24
+        patch = MplPolygon(exterior, closed=True, facecolor=face_color, edgecolor=edge_color, linewidth=edge_width, alpha=alpha)
         ax.add_patch(patch)
 
         # Room label centroid
@@ -132,7 +138,9 @@ def render_solution_overlay(
         cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
         area_m2 = room.get("area_m2", 0.0)
         label_text = f"{r_id}\n({kind})\n{area_m2:.1f} m²"
-        ax.text(cx, cy, label_text, ha="center", va="center", fontsize=8, color="#2B2D42", weight="semibold", alpha=0.85)
+        ax.text(cx, cy, label_text, ha="center", va="center", fontsize=7.5, color="#20252B",
+                weight="semibold", alpha=1, zorder=9,
+                bbox=dict(boxstyle="round,pad=0.28", facecolor="white", edgecolor="none", alpha=0.9))
 
     # 2. Draw Internal Boundary
     boundary_data = plan.get("internal_boundary", {})
@@ -149,7 +157,7 @@ def render_solution_overlay(
             py = [pts[0][1], pts[1][1]]
             p_kind = portal.get("kind", "door")
             color = "#06D6A0" if p_kind == "door" else "#118AB2"
-            ax.plot(px, py, color=color, linewidth=4.0, solid_capstyle="round", label=f"Portal ({p_kind})")
+            ax.plot(px, py, color=color, linewidth=5.0, solid_capstyle="butt", zorder=4)
 
     # 4. Draw Obstacles (Walls, Windows)
     for obs in plan.get("obstacles", []):
@@ -159,10 +167,10 @@ def render_solution_overlay(
         if isinstance(geom_data, list):
             ox = [p["x"] for p in geom_data]
             oy = [p["y"] for p in geom_data]
-            ax.plot(ox, oy, color=obs_color, linewidth=3.0, solid_capstyle="round")
+            ax.plot(ox, oy, color=obs_color, linewidth=3.2, solid_capstyle="round", zorder=7)
         elif isinstance(geom_data, dict) and "exterior" in geom_data:
             o_ext = [(p["x"], p["y"]) for p in geom_data.get("exterior", [])]
-            o_patch = MplPolygon(o_ext, closed=True, facecolor=obs_color, edgecolor=obs_color, linewidth=1.5, alpha=0.5)
+            o_patch = MplPolygon(o_ext, closed=True, facecolor=obs_color, edgecolor=obs_color, linewidth=1.5, alpha=0.72, zorder=7)
             ax.add_patch(o_patch)
 
     # 5. Draw Cable Rings
@@ -188,8 +196,8 @@ def render_solution_overlay(
             ly = [p[1] for p in pts]
 
             # Route polyline: contrasting white casing + vibrant core cable
-            ax.plot(lx, ly, color="white", linewidth=4.8, alpha=0.95, zorder=5, solid_capstyle="round", solid_joinstyle="round")
-            ax.plot(lx, ly, color=cable_color, linewidth=2.8, alpha=0.95, zorder=6, solid_capstyle="round", solid_joinstyle="round")
+            ax.plot(lx, ly, color="white", linewidth=4.2, alpha=1, zorder=5, solid_capstyle="round", solid_joinstyle="round")
+            ax.plot(lx, ly, color=cable_color, linewidth=2.2, alpha=1, zorder=6, solid_capstyle="round", solid_joinstyle="round")
 
             # Find longest segment to host sequence badge
             longest_seg_idx = 0
@@ -226,8 +234,8 @@ def render_solution_overlay(
                 ny = (p2[0] - p1[0]) / max_seg_len
                 bx = badge_x + nx * 1.5
                 by = badge_y + ny * 1.5
-                ax.text(
-                    bx, by, f"#{leg_idx + 1}",
+                ax.annotate(
+                    f"#{leg_idx + 1}", xy=(bx, by), xytext=(0, 0), textcoords="offset points",
                     fontsize=7.5, weight="bold", color="white", ha="center", va="center",
                     bbox=dict(boxstyle="circle,pad=0.25", facecolor=cable_color, edgecolor="white", lw=1.2),
                     zorder=8,
@@ -242,9 +250,11 @@ def render_solution_overlay(
         order_str = f" [Stop {order_list[0]}]" if order_list else ""
 
         ax.scatter(nx_val, ny_val, s=200, color="#FFB703", edgecolor="#D48B00", linewidth=2.2, zorder=10)
-        ax.text(
-            nx_val + 1.5, ny_val - 2.2, f"{n_id}{order_str}",
+        ax.annotate(
+            f"{n_id}{order_str}", xy=(nx_val, ny_val), xytext=(8, -10), textcoords="offset points",
             fontsize=8, weight="bold", color="#1F2421",
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="#D48B00", alpha=0.96),
+            ha="left", va="top",
             path_effects=[pe.withStroke(linewidth=3, foreground="white")],
             zorder=11,
         )
@@ -255,10 +265,12 @@ def render_solution_overlay(
         hx_val = float(hub["point"]["x"])
         hy_val = float(hub["point"]["y"])
         h_color = hub_color_map.get(h_id, "#E63946")
-        ax.scatter(hx_val, hy_val, s=360, marker="*", color=h_color, edgecolor="#1B263B", linewidth=2.4, zorder=12)
-        ax.text(
-            hx_val + 2.0, hy_val + 2.5, f"★ Hub: {h_id} (Loop Start/End)",
+        ax.scatter(hx_val, hy_val, s=90, marker="*", color=h_color, edgecolor="white", linewidth=1.8, zorder=12)
+        ax.annotate(
+            f"Hub: {h_id}", xy=(hx_val, hy_val), xytext=(9, 9), textcoords="offset points",
             fontsize=9, weight="bold", color=h_color,
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor=h_color, alpha=0.96),
+            ha="left", va="bottom",
             path_effects=[pe.withStroke(linewidth=3.5, foreground="white")],
             zorder=13,
         )
@@ -295,8 +307,28 @@ def render_solution_overlay(
 
     ax.set_title(f"Plan: {plan.get('id', 'N/A')} — Cable Routing Verification Overlay", fontsize=12, weight="bold", pad=12)
     ax.grid(True, linestyle=":", alpha=0.4)
+    _add_floorplan_legend(ax, plan, hub_color_map)
 
     if output_path:
         fig.savefig(output_path, bbox_inches="tight")
 
     return fig
+
+
+def _add_floorplan_legend(ax: Any, plan: Dict[str, Any], hub_colors: Optional[Dict[str, str]] = None) -> None:
+    """Show a key for room kinds, obstacles, and portals."""
+    handles = []
+    kinds = sorted({room.get("kind", "other") for room in plan.get("rooms", [])})
+    handles.extend(Patch(facecolor=ROOM_TYPE_COLORS.get(kind, ROOM_TYPE_COLORS["other"]),
+                         edgecolor="#6C757D", label=f"Room: {kind}") for kind in kinds)
+    for kind in sorted({item.get("kind", "wall") for item in plan.get("obstacles", [])}):
+        color = "#17212B" if kind == "wall" else "#00A6C7" if kind == "window" else "#495057"
+        handles.append(Line2D([0], [0], color=color, lw=3, label=kind.title()))
+    for kind in sorted({item.get("kind", "door") for item in plan.get("portals", [])}):
+        color = "#06D6A0" if kind == "door" else "#118AB2"
+        handles.append(Line2D([0], [0], color=color, lw=4, label=kind.replace("_", " ").title()))
+    for hub_id, color in (hub_colors or {}).items():
+        handles.append(Line2D([0], [0], color=color, lw=2.2, label=f"Territory: {hub_id}"))
+    if handles:
+        ax.legend(handles=handles, loc="upper right", fontsize=7.5, framealpha=0.96,
+                  title="Floor plan key", title_fontsize=8)
