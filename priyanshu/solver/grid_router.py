@@ -248,13 +248,101 @@ def _simplify_collinear(points: List[Point2D]) -> List[Point2D]:
     return result if len(result) >= 2 else [*result, *result]
 
 
+def _parse_obstacle_geom(geom: Any) -> Optional[Any]:
+    """Parse obstacle geometry into Shapely Polygon or LineString."""
+    if isinstance(geom, dict):
+        return _parse_polygon(geom)
+    elif isinstance(geom, list):
+        if len(geom) >= 3 and geom[0] == geom[-1]:
+            return Polygon([(p["x"], p["y"]) for p in geom])
+        elif len(geom) >= 2:
+            return LineString([(p["x"], p["y"]) for p in geom])
+    return None
+
+
+def _compute_medial_axis_chebyshev_center(
+    poly: Polygon,
+    eroded: Polygon,
+    scale: float,
+    obstacles: Optional[List[Any]] = None,
+) -> Point:
+    """
+    Compute the Medial Axis Transform / Voronoi Skeleton of the room
+    to locate the Chebyshev center (the topological point maximizing distance to all walls simultaneously).
+    Falls back gracefully to eroded.representative_point() if Voronoi skeleton is degenerate.
+    """
+    try:
+        import numpy as np
+        from scipy.spatial import Voronoi
+
+        ext = poly.exterior
+        length = ext.length
+        if length <= 0:
+            return eroded.representative_point()
+
+        # Adaptive sample spacing along boundary (~0.25m)
+        step = min(scale * 0.25, max(length / 80.0, 0.05 * scale))
+        sample_pts = [ext.interpolate(d) for d in np.arange(0, length, step)]
+
+        # Sample interior holes if any
+        for interior in poly.interiors:
+            i_len = interior.length
+            i_step = min(scale * 0.25, max(i_len / 40.0, 0.05 * scale))
+            sample_pts.extend([interior.interpolate(d) for d in np.arange(0, i_len, i_step)])
+
+        # Sample room obstacles if any
+        if obstacles:
+            for obs in obstacles:
+                if obs.intersects(poly):
+                    obs_b = obs.boundary if hasattr(obs, "boundary") else obs
+                    o_len = obs_b.length
+                    if o_len > 0:
+                        o_step = min(scale * 0.25, max(o_len / 40.0, 0.05 * scale))
+                        sample_pts.extend([obs_b.interpolate(d) for d in np.arange(0, o_len, o_step)])
+
+        if len(sample_pts) < 4:
+            return eroded.representative_point()
+
+        coords = np.array([[pt.x, pt.y] for pt in sample_pts])
+        vor = Voronoi(coords)
+
+        best_pt = eroded.representative_point()
+        max_d = poly.boundary.distance(best_pt)
+
+        # Evaluate Voronoi skeleton vertices inside the safe eroded polygon
+        for v in vor.vertices:
+            pv = Point(v[0], v[1])
+            if eroded.contains(pv):
+                d = poly.boundary.distance(pv)
+                if obstacles:
+                    obs_d = min((obs.distance(pv) for obs in obstacles), default=d)
+                    d = min(d, obs_d)
+                if d > max_d:
+                    max_d = d
+                    best_pt = pv
+
+        return best_pt
+    except Exception:
+        return eroded.representative_point()
+
+
 def find_legal_hub_candidates(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Generate legal hub candidates having >= 0.5m clearance from room boundary."""
+    """
+    Generate legal hub candidates using the Medial Axis Transform / Voronoi Skeleton
+    to locate the Chebyshev center of each eligible room (maximizing clearance from all walls).
+    Guarantees >= 0.5m clearance with maximum safety margin.
+    """
     scale = float(plan.get("drawing_units_per_metre", 1.0))
     clearance_m = float(plan.get("rules", {}).get("node_wall_clearance_m", 0.5))
     tol_m = float(plan.get("rules", {}).get("geometry_tolerance", 0.001))
     clearance_units = clearance_m * scale
     tol_units = tol_m * scale
+
+    obstacles = []
+    for obs in plan.get("obstacles", []):
+        parsed = _parse_obstacle_geom(obs.get("geometry"))
+        if parsed is not None:
+            obstacles.append(parsed)
 
     candidates = []
     for r in plan.get("rooms", []):
@@ -263,10 +351,13 @@ def find_legal_hub_candidates(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
         poly = _parse_polygon(r["geometry"])
         eroded = poly.buffer(-clearance_units)
         if not eroded.is_empty:
-            # Pick representative point inside eroded safe region
-            cand = eroded.representative_point()
+            # Medial Axis Transform / Voronoi Skeleton Chebyshev center
+            cand = _compute_medial_axis_chebyshev_center(poly, eroded, scale, obstacles)
             cand_pt = (round(cand.x, 2), round(cand.y, 2))
             actual_dist = poly.boundary.distance(Point(cand_pt))
+            if obstacles:
+                obs_dist = min((obs.distance(Point(cand_pt)) for obs in obstacles), default=actual_dist)
+                actual_dist = min(actual_dist, obs_dist)
             if actual_dist + tol_units >= clearance_units:
                 candidates.append({
                     "room_id": r["id"],

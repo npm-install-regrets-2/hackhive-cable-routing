@@ -99,7 +99,7 @@
         {
           "from": "node:bedroom:001",
           "to": "node:kitchen:000",
-          "length_m": 6.869,
+          "length_m": 6.307,
           "polyline": [
             [
               2.878,
@@ -110,16 +110,16 @@
               7.258
             ],
             [
-              2.59,
+              2.871,
               7.258
             ],
             [
-              2.59,
-              5.724
+              2.871,
+              5.452
             ],
             [
               5.828,
-              5.724
+              5.452
             ],
             [
               5.828,
@@ -190,16 +190,16 @@
           ]
         }
       ],
-      "ring_length_m": 30.017
+      "ring_length_m": 29.455
     }
   ],
   "reported_metrics": {
     "hub_count": 1,
-    "total_length_m": 30.017,
+    "total_length_m": 29.455,
     "crossings": 0,
     "overlap_m": 0.0,
     "bends": 18,
-    "route_cost": 39.017,
+    "route_cost": 38.455,
     "area_gap_m2": 0.0
   }
 }
