@@ -12,9 +12,10 @@ This is the agreed temporary ownership while the team develops in parallel. `PRO
 
 1. The shared schema is the data boundary. Harshit produces `plan`; Priyanshu consumes `plan` and produces `solution`; Sana consumes both. The complete export wraps both in `schema_version`, `plan`, and `solution`.
 2. During parallel development, each team can validate its own object against `#/$defs/plan` or `#/$defs/solution` in `shared/schema/common.schema.json`. The root schema validates the combined export.
-3. Put small hand-checked examples in `shared/fixtures/` when at least two workspaces use them. Preserve IDs and drawing-unit coordinates. Record expected feasibility and metric arithmetic beside the fixture.
+3. Put small hand-checked examples in `shared/fixtures/` when at least two workspaces use them. Preserve IDs and drawing-unit coordinates in the development contract. Record expected feasibility and metric arithmetic beside the fixture.
 4. Harshit owns the meaning and construction of portals and geometric legality queries. Priyanshu uses those results to construct routes. Sana checks the final submitted geometry independently against the same challenge rules.
 5. A shared interface change needs the producing developer and affected consumers to review it before merging.
+6. The slide-8 team submission is a separate export in metres, not the drawing-unit `Solution` or complete development wrapper. Priyanshu supplies solved geometry; Sana owns the checked export/overlay integration. Review an export adapter against the full organizer schema if one becomes available.
 
 ## Parallel workflow
 
@@ -22,4 +23,4 @@ Each developer clones the same repository, creates a branch for a small task, up
 
 ## Current assumptions to keep configurable
 
-The team has no newer organizer material for fixed node coordinates, hub placement legality, or the final output JSON format. Use the development assumptions in `PROJECT_PLAN.md`, label fallback node data clearly, and adapt the output if the official schema arrives. The newer slides specify five nodes per hub; the older statement says twenty, so keep this limit configurable as the plan requires.
+The reviewed eight-slide `Cable Ring Challenge - Problem Statement4.pptx` confirms fixed input nodes, a hub inside one of its assigned eligible rooms and at least 0.5 m from walls, five nodes per hub, and an abridged metre-coordinate team-output example. The deck does not give a machine-readable fixed-node input schema or complete submission schema, and excluded-interior-room transit still needs clarification. Use the development assumptions in `PROJECT_PLAN.md`, label fallback node data clearly, and keep capacities/tolerances configurable. Do not submit the drawing-unit development JSON as the slide-8 output without conversion and validation.

@@ -1,0 +1,5 @@
+archive/ResPlan.pkl
+.uv-cache
+**/__pycache__
+**/.venv
+**/.pytest_cache

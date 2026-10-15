@@ -24,6 +24,58 @@ TERRITORY_COLORS = [
 ]
 
 
+def render_input_plan(
+    plan: Dict[str, Any],
+    figsize: Tuple[int, int] = (12, 10),
+    dpi: int = 160,
+) -> plt.Figure:
+    """Render normalized input geometry without assignments or solver routes."""
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    ax.set_aspect("equal")
+
+    for room in plan.get("rooms", []):
+        exterior = [(p["x"], p["y"]) for p in room.get("geometry", {}).get("exterior", [])]
+        if not exterior:
+            continue
+        eligible = room.get("eligible", False)
+        color = "#B7E4C7" if eligible else "#DEE2E6"
+        ax.add_patch(MplPolygon(exterior, closed=True, facecolor=color, edgecolor="#495057", linewidth=1.0, alpha=0.75))
+        cx = sum(p[0] for p in exterior[:-1]) / max(1, len(exterior) - 1)
+        cy = sum(p[1] for p in exterior[:-1]) / max(1, len(exterior) - 1)
+        ax.text(cx, cy, f"{room.get('id')}\n{room.get('kind', 'room')}\n{room.get('area_m2', 0):.1f} m²",
+                ha="center", va="center", fontsize=7, color="#212529")
+
+    boundary = [(p["x"], p["y"]) for p in plan.get("internal_boundary", {}).get("exterior", [])]
+    if boundary:
+        ax.add_patch(MplPolygon(boundary, closed=True, fill=False, edgecolor="#1B263B", linewidth=2.2, linestyle="--"))
+
+    for obs in plan.get("obstacles", []):
+        geom = obs.get("geometry")
+        color = "#212529" if obs.get("kind") == "wall" else "#00B4D8"
+        if isinstance(geom, list):
+            ax.plot([p["x"] for p in geom], [p["y"] for p in geom], color=color, linewidth=2.5)
+        elif isinstance(geom, dict) and geom.get("exterior"):
+            pts = [(p["x"], p["y"]) for p in geom["exterior"]]
+            ax.add_patch(MplPolygon(pts, closed=True, facecolor=color, edgecolor=color, alpha=0.45))
+
+    for portal in plan.get("portals", []):
+        pts = portal.get("segment", [])
+        if len(pts) >= 2:
+            ax.plot([pts[0]["x"], pts[1]["x"]], [pts[0]["y"], pts[1]["y"]],
+                    color="#06D6A0" if portal.get("kind") == "door" else "#118AB2",
+                    linewidth=4, solid_capstyle="round")
+
+    for node in plan.get("nodes", []):
+        p = node["point"]
+        ax.scatter(float(p["x"]), float(p["y"]), s=75, color="#FFB703", edgecolor="#9C6500", zorder=5)
+        ax.text(float(p["x"]) + 0.8, float(p["y"]) + 0.8, str(node["id"]), fontsize=7)
+
+    ax.set_title(f"Plan {plan.get('id', 'N/A')} — Normalized input (no solution)", weight="bold")
+    ax.grid(True, linestyle=":", alpha=0.35)
+    ax.margins(0.06)
+    return fig
+
+
 def render_solution_overlay(
     plan: Dict[str, Any],
     solution: Dict[str, Any],
