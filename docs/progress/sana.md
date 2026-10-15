@@ -21,3 +21,13 @@ Append entries using the format in `docs/README.md`. Owns independent validation
 - Open: obstacle-aware grid routing in Priyanshu's solver and raw archive loading for larger ResPlan benchmark
 - Next: build the Streamlit interactive dashboard linking this pipeline
 - Commit/PR: pending
+
+## 2026-10-16 — Kaggle dataset integration, official Slide 8 submission format, and placement scenario tests
+
+- Status: done
+- Changed: `sana/export.py`, `sana/demo/end_to_end.py`, `sana/tests/test_export.py`, `sana/tests/test_hub_placement_scenarios.py`, `.gitignore`
+- Why: access the 17,000-plan ResPlan archive, test plans from the dataset directly, implement the official Slide 8 submission JSON format in physical metres, and add 5 stress scenarios verifying hub placement legality and capacity constraints
+- Checked: `python -m pytest sana/tests -v` (all 24 tests passing); `python sana/demo/end_to_end.py --plan-id 14926` executed on real dataset plan; official Slide 8 JSON export validated
+- Open: obstacle-aware grid pathfinding in Priyanshu's solver
+- Next: wrap the full pipeline into the Streamlit presentation app
+- Commit/PR: pending
