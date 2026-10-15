@@ -10,4 +10,4 @@ Append entries using the format in `docs/README.md`. Owns hub assignment, pathfi
 - Checked: `uv run pytest` from `priyanshu/`; 5 tests passed, including Plan/Solution/complete-export validation against `shared/schema/common.schema.json`
 - Open: obstacle-aware free-space geometry and authoritative legal hub-candidate generation still require Harshit's geometry capability; fixture-scale exhaustive search is not intended for production plan sizes
 - Next: replace room-center candidates and sampled rectangular routing with Harshit's legal candidate/free-space queries, then introduce scalable connected assignment and path caching
-- Commit/PR: pending
+- Commit/PR: `8083b4f`; https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/1
