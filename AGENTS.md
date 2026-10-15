@@ -1,56 +1,31 @@
-# Collaboration Guide
+# Repository Guide
 
-This repository has three temporary developer workspaces. Keep implementation code inside the assigned workspace until the first integration pass; the folders may be renamed when the branches are merged.
+## Read before changing behavior
 
-## Source of truth
+- `PROJECT_PLAN.md`: challenge rules, objective order, and configurable assumptions.
+- `CONTEXT.md`: domain terms for hubs, nodes, territories, portals, rings, and legs.
+- `shared/schema/common.schema.json`: development interchange contract for Plan and Solution JSON.
+- `docs/workstreams.md`: module responsibilities and integration history when a change spans modules.
+- `docs/README.md`: progress-log format.
 
-- Read `PROJECT_PLAN.md` before changing behavior or constraints.
-- Read `CONTEXT.md` before naming domain objects. Use `hub`, `node`, `territory`, `portal`, `ring`, and `leg` as defined there.
-- Read `shared/schema/common.schema.json` before producing or consuming plan or solution JSON. It is the development interchange contract; an organizer-provided schema supersedes it.
-- Read `docs/README.md` before implementation. Update your progress log after each meaningful implementation step so teammates can resume from it.
-- Read `docs/workstreams.md` before starting or reviewing a task that crosses workspaces.
-- Treat capacities and tolerances as configuration. The current defaults are 100 m² and five nodes per hub.
+## Package layout
 
-## Ownership
-
-### `harshit/`
-
-Own input loading, ResPlan normalization, unit conversion, eligible-room extraction, fixed-node loading/fallback generation, obstacle and portal geometry, traversability construction, and geometric primitives needed by the other workspaces.
-
-Completion criterion: a normalized `Plan` conforming to the shared schema can be produced from a dataset item, with stable room/node/portal IDs and explicit diagnostics for unusable geometry.
-
-### `priyanshu/`
-
-Own legal hub-candidate generation using Harshit's geometry contract, minimum-hub connected assignment, rectilinear pathfinding, per-hub closed-ring ordering, fixed-hub-count improvement, and solution serialization.
-
-Completion criterion: a schema-valid normalized `Plan` can be consumed to produce a schema-valid `Solution`, with infeasibility or best-known status reported explicitly. Sana's validator independently checks feasibility and metrics.
-
-### `sana/`
-
-Own independent validation of every hard rule, metric recomputation and ranking, solution diagnostics, visual overlays, and the end-to-end demo that connects the normalized input, solver output, and checked result.
-
-Completion criterion: a `Plan` and `Solution` can be checked without importing Priyanshu's optimizer, and the displayed overlay and metrics are derived from the checked solution.
-
-### `shared/`
-
-Contains only stable interfaces and fixtures needed across workspaces. Changes here require impact review by the producer and every affected consumer. Keep algorithms and developer-specific utilities out of this folder.
+- `cable_planner/ingestion/` and `cable_planner/geometry/` normalize trusted input and derive verified traversability.
+- `cable_planner/solver/` selects hubs, assigns connected territories, and constructs closed cable rings. `cable_planner.solver.solve` is the current obstacle-aware solver.
+- `cable_planner/validation/` and `cable_planner/metrics/` check solutions independently of the solver and recompute their score.
+- `cable_planner/visualization/`, `cable_planner/demo/`, and `cable_planner/export.py` present and export checked results.
+- `shared/` contains stable schema and cross-module fixtures; `tests/` holds focused tests by responsibility.
 
 ## Integration rules
 
-1. Exchange data only through objects represented by `shared/schema/common.schema.json`.
-2. Preserve IDs from input to output; geometry joins use IDs, never array positions.
-3. Coordinates remain in drawing units. Length and area fields whose names end in `_m` or `_m2` are physical measurements.
-4. A polygon ring is closed: its last point equals its first point. A cable ring is also closed and begins and ends at its owning hub.
-5. Emit deterministic output for identical input and configuration, including stable array ordering.
-6. Validate at each boundary. Reject malformed or infeasible data with structured diagnostics instead of silently repairing it.
-7. Add tests and fixtures in the workspace that owns the behavior. Shared fixtures belong in `shared/fixtures/` when multiple workspaces consume them.
-8. Cross-workspace interaction goes through the shared contract. During integration, promote stable code into final package names and update imports in one dedicated merge change.
-9. Develop on task branches. Another developer reviews each pull request; the project owner merges it into `main`.
+1. Exchange Plan and Solution data through `shared/schema/common.schema.json`; preserve input IDs in output. Join geometry by ID, not array position.
+2. Keep coordinates in drawing units. Fields ending in `_m` or `_m2` contain physical measurements.
+3. Polygon rings are closed. Each cable ring starts and ends at its owning hub.
+4. Emit deterministic output for identical input and configuration. Report malformed or infeasible data with structured diagnostics.
+5. Keep the 100 m² area limit, five-node limit, and geometry tolerances configurable. Follow the objective order in `PROJECT_PLAN.md`.
+6. Validate at module seams. Solver claims are advisory; independent validation and recomputed metrics determine the displayed result.
+7. Put tests in the corresponding `tests/` area. Add shared fixtures only when multiple modules consume them.
+8. For schema changes, record the producer, consumers, compatibility effect, and migration before editing. Prefer additive optional fields; update the schema version, adapters, and fixtures together for a breaking change.
+9. Develop on task branches, update `docs/progress/integration.md` after meaningful integration work, and have another developer review a pull request before the project owner merges it into `main`.
 
-## Shared-schema changes
-
-Before editing the schema, state the producer, consumers, compatibility effect, and migration. Prefer additive optional fields during parallel development. If a breaking change is necessary, update `schema_version`, all affected workspace adapters, and the shared fixtures together.
-
-## Definition of done
-
-A change is complete when its owned tests pass, emitted JSON validates against the shared schema, terminology matches `CONTEXT.md`, any assumption not confirmed by the challenge material is configurable and documented, and its progress log is current.
+A change is complete when its relevant tests pass, emitted JSON validates against the shared schema, terminology matches `CONTEXT.md`, and any unconfirmed challenge assumption remains configurable and documented.

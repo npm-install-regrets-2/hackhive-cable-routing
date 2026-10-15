@@ -31,3 +31,13 @@ Append entries using the format in `docs/README.md`. Owns independent validation
 - Open: obstacle-aware grid pathfinding in Priyanshu's solver
 - Next: wrap the full pipeline into the Streamlit presentation app
 - Commit/PR: pending
+
+## 2026-10-16 — Repair Streamlit demo and show live checked route cost
+
+- Status: done
+- Changed: `sana/demo/app.py`, `sana/visualization/renderer.py`, `sana/tests/test_streamlit_app.py`
+- Why: the app imported a nonexistent trusted-archive module and input renderer, and a long-running Streamlit process could keep an older solver module in memory
+- Checked: Streamlit AppTest starts without exceptions; plan 13033 run shows checked route cost 31.6972 and renders both figures; local Streamlit server health check passes on port 8502
+- Open: none for the demo; solver quality remains Priyanshu's workstream
+- Next: use the running app to inspect additional plan IDs and compare checked metrics
+- Commit/PR: pending

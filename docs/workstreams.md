@@ -1,25 +1,14 @@
-# Three-developer work split
+# Module responsibilities
 
-This is the agreed temporary ownership while the team develops in parallel. `PROJECT_PLAN.md` defines the problem and phases; `AGENTS.md` defines the repository rules. The temporary developer folders can be consolidated after an end-to-end run works.
+The initial parallel workspaces were consolidated into `cable_planner/`. Historical work is recorded in `docs/progress/harshit.md`, `docs/progress/priyanshu.md`, and `docs/progress/sana.md`.
 
-| Developer | Owns | Produces | Starts with |
-| --- | --- | --- | --- |
-| Harshit | ResPlan loading, unit conversion, eligible-room and fixed-node input, polygon components, obstacles, portals, traversability | Normalized `Plan` with stable IDs and geometry diagnostics | One dataset item converted into the shared plan shape; a small synthetic plan fixture |
-| Priyanshu | Hub candidates, connected capacity-constrained assignment, legal axis-aligned paths, closed ring order, route improvement | `Solution` with hubs, exclusive assignments, rings, and status | A small schema-valid plan fixture; minimum-hub assignment and one legal ring |
-| Sana | Independent hard-rule validator, checker-style metrics and ranking, visual overlay, end-to-end demo | Validation report, recomputed score, matching visual/JSON view | Hand-checked plan/solution fixtures with valid and invalid cases |
+| Module | Responsibility | Interface |
+| --- | --- | --- |
+| `ingestion/`, `geometry/` | Normalize trusted ResPlan input, preserve stable IDs, derive rooms, nodes, obstacles, and verified portals | Schema-valid `Plan` and structured diagnostics |
+| `solver/` | Generate legal hub candidates, assign connected territories, route axis-aligned closed rings, and report feasibility | `cable_planner.solver.solve(plan)` returning `Solution` |
+| `validation/`, `metrics/` | Independently check hard rules and recompute H, L, X, O, B, J, and area gap | `IndependentValidator.validate(plan, solution)` |
+| `visualization/`, `demo/`, `export.py` | Show checked input/output overlays and produce development or official-format JSON | Checked report and files |
 
-## Handoffs
+The shared schema is the seam between the normalized Plan and Solution. A schema change requires review by the producer and each affected consumer. The optimizer and validator must remain independently implemented so the validator can detect solver defects.
 
-1. The shared schema is the data boundary. Harshit produces `plan`; Priyanshu consumes `plan` and produces `solution`; Sana consumes both. The complete export wraps both in `schema_version`, `plan`, and `solution`.
-2. During parallel development, each team can validate its own object against `#/$defs/plan` or `#/$defs/solution` in `shared/schema/common.schema.json`. The root schema validates the combined export.
-3. Put small hand-checked examples in `shared/fixtures/` when at least two workspaces use them. Preserve IDs and drawing-unit coordinates. Record expected feasibility and metric arithmetic beside the fixture.
-4. Harshit owns the meaning and construction of portals and geometric legality queries. Priyanshu uses those results to construct routes. Sana checks the final submitted geometry independently against the same challenge rules.
-5. A shared interface change needs the producing developer and affected consumers to review it before merging.
-
-## Parallel workflow
-
-Each developer clones the same repository, creates a branch for a small task, updates their progress log, and opens a pull request. Another developer reviews the PR; the project owner merges it into `main`. After a merge, developers update their branches from `main` before building on the changed contract. Merge the first fixture and vertical slice early, then continue with smaller PRs instead of waiting for all three workspaces to be finished.
-
-## Current assumptions to keep configurable
-
-The team has no newer organizer material for fixed node coordinates, hub placement legality, or the final output JSON format. Use the development assumptions in `PROJECT_PLAN.md`, label fallback node data clearly, and adapt the output if the official schema arrives. The newer slides specify five nodes per hub; the older statement says twenty, so keep this limit configurable as the plan requires.
+The challenge materials have not confirmed fixed node coordinates, exact hub-placement legality, or the final organizer schema. The development fallback nodes and the configurable capacity/tolerance assumptions remain documented in `PROJECT_PLAN.md`.
