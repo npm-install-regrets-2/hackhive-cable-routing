@@ -1,5 +1,15 @@
 # Integration progress
 
+## 2026-10-16 — Improve floor overlay clarity
+
+- Status: done
+- Changed: `cable_planner/visualization/renderer.py`
+- Why: distinguish room kinds and architectural features in the output diagram, keep labels legible over routes, and make co-located hub/node symbols readable
+- Checked: `.venv\\Scripts\\python.exe -m pytest` (42 passed); the 13033 and 14433 routing-cost assertions passed with the existing solver
+- Open: rendered cable geometry is unchanged; it can still be close to a wall in the underlying coordinates
+- Next: review a representative generated overlay
+- Commit/PR: `c6591d7` on `fix/floor-diagram-clarity`; push pending destination approval
+
 ## 2026-10-16 — Consolidate the working solver and demo into one package
 
 - Status: complete
