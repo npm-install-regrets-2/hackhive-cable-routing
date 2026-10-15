@@ -1,0 +1,24 @@
+{
+  "id": "thin-three-room",
+  "drawing_units_per_metre": 1,
+  "internal_boundary": {
+    "exterior": [{"x": 0, "y": 0}, {"x": 18, "y": 0}, {"x": 18, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}],
+    "holes": []
+  },
+  "rooms": [
+    {"id": "room:a", "source_label": "living_0", "kind": "living", "eligible": true, "geometry": {"exterior": [{"x": 0, "y": 0}, {"x": 6, "y": 0}, {"x": 6, "y": 5}, {"x": 0, "y": 5}, {"x": 0, "y": 0}], "holes": []}, "area_m2": 30},
+    {"id": "room:b", "source_label": "kitchen_0", "kind": "kitchen", "eligible": true, "geometry": {"exterior": [{"x": 6, "y": 0}, {"x": 12, "y": 0}, {"x": 12, "y": 5}, {"x": 6, "y": 5}, {"x": 6, "y": 0}], "holes": []}, "area_m2": 30},
+    {"id": "room:c", "source_label": "bedroom_0", "kind": "bedroom", "eligible": true, "geometry": {"exterior": [{"x": 12, "y": 0}, {"x": 18, "y": 0}, {"x": 18, "y": 5}, {"x": 12, "y": 5}, {"x": 12, "y": 0}], "holes": []}, "area_m2": 30}
+  ],
+  "nodes": [
+    {"id": "node:a", "room_id": "room:a", "point": {"x": 2, "y": 2}, "source": "development_fallback"},
+    {"id": "node:b", "room_id": "room:b", "point": {"x": 9, "y": 2}, "source": "development_fallback"},
+    {"id": "node:c", "room_id": "room:c", "point": {"x": 16, "y": 2}, "source": "development_fallback"}
+  ],
+  "portals": [
+    {"id": "portal:ab", "space_a_id": "room:a", "space_b_id": "room:b", "kind": "door", "segment": [{"x": 6, "y": 1.5}, {"x": 6, "y": 2.5}]},
+    {"id": "portal:bc", "space_a_id": "room:b", "space_b_id": "room:c", "kind": "open_passage", "segment": [{"x": 12, "y": 1.5}, {"x": 12, "y": 2.5}]}
+  ],
+  "obstacles": [],
+  "rules": {"max_area_m2_per_hub": 100, "max_nodes_per_hub": 5, "node_wall_clearance_m": 0.5, "geometry_tolerance": 0.001}
+}
