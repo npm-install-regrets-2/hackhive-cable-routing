@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from sana.validation.checker import IndependentValidator
 from sana.validation.models import ValidationReport
 from sana.visualization.renderer import render_solution_overlay

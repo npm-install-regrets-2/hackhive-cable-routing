@@ -463,7 +463,9 @@ def _solve_fixed_hub_count(
             }
             hubs.append(hub_dict)
 
-            ring = _route_territory_ring(hub_dict, territory_rooms, nodes, router, scale)
+            ring = _route_territory_ring(
+                hub_dict, territory_rooms, nodes, router, scale, existing_rings=rings
+            )
             if ring is None:
                 feasible = False
                 break
@@ -544,16 +546,154 @@ def _partition_connected(
     return valid_partitions
 
 
+def _detect_crossings(
+    paths: List[List[Point2D]],
+    exempt_pts: List[Point2D],
+    tol: float = 0.05,
+) -> List[Tuple[int, int, Point2D]]:
+    """Detect non-terminal intersection points between different legs."""
+    all_segs = []
+    for l_idx, p in enumerate(paths):
+        s_p = _simplify_collinear(p)
+        for s_idx in range(len(s_p) - 1):
+            p1, p2 = s_p[s_idx], s_p[s_idx + 1]
+            if math.hypot(p2[0] - p1[0], p2[1] - p1[1]) > tol:
+                all_segs.append((l_idx, LineString([p1, p2])))
+
+    crossings = []
+    for i in range(len(all_segs)):
+        l1, ls1 = all_segs[i]
+        for j in range(i + 1, len(all_segs)):
+            l2, ls2 = all_segs[j]
+            if l1 == l2:
+                continue
+            if ls1.intersects(ls2):
+                inter = ls1.intersection(ls2)
+                if inter.geom_type == "Point":
+                    pt = (inter.x, inter.y)
+                    if any(math.hypot(pt[0] - ep[0], pt[1] - ep[1]) <= tol for ep in exempt_pts):
+                        continue
+                    crossings.append((l1, l2, pt))
+                elif inter.geom_type == "MultiPoint":
+                    for g in inter.geoms:
+                        pt = (g.x, g.y)
+                        if any(math.hypot(pt[0] - ep[0], pt[1] - ep[1]) <= tol for ep in exempt_pts):
+                            continue
+                        crossings.append((l1, l2, pt))
+
+    unique: List[Tuple[int, int, Point2D]] = []
+    for c in crossings:
+        if not any(
+            c[0] == u[0] and c[1] == u[1] and math.hypot(c[2][0] - u[2][0], c[2][1] - u[2][1]) <= tol
+            for u in unique
+        ):
+            unique.append(c)
+    return unique
+
+
+def _rip_up_and_reroute(
+    seq: List[str],
+    coords: List[Point2D],
+    paths: List[List[Point2D]],
+    router: HananRouter,
+    scale: float,
+    exempt_pts: List[Point2D],
+    max_iterations: int = 6,
+) -> List[List[Point2D]]:
+    """
+    Rip-up and reroute intersecting legs to eliminate cable-on-cable crossings (X -> 0).
+    Iteratively detects crossing legs, heavily penalizes conflicting corridors/vertices,
+    and reroutes with A* to achieve zero crossings without increasing collinear overlap.
+    """
+    current_paths = [list(p) for p in paths]
+    num_legs = len(current_paths)
+    if num_legs <= 1:
+        return current_paths
+
+    for it in range(max_iterations):
+        crossings = _detect_crossings(current_paths, exempt_pts)
+        if not crossings:
+            break
+
+        leg_conflict_counts: Dict[int, int] = {}
+        for i, j, pt in crossings:
+            leg_conflict_counts[i] = leg_conflict_counts.get(i, 0) + 1
+            leg_conflict_counts[j] = leg_conflict_counts.get(j, 0) + 1
+
+        conflict_legs = sorted(leg_conflict_counts.keys(), key=lambda idx: leg_conflict_counts[idx], reverse=True)
+        improved_any = False
+
+        for leg_idx in conflict_legs:
+            dyn_g = router.graph.copy()
+
+            # Penalize edges and intermediate vertices of all other legs
+            for other_idx in range(num_legs):
+                if other_idx == leg_idx:
+                    continue
+                other_p = current_paths[other_idx]
+                for k in range(len(other_p) - 1):
+                    u, v = other_p[k], other_p[k + 1]
+                    if dyn_g.has_edge(u, v):
+                        dyn_g[u][v]["weight"] = dyn_g[u][v].get("weight", 1.0) + 100.0 * scale
+
+                for k in range(len(other_p)):
+                    v_pt = other_p[k]
+                    if any(math.hypot(v_pt[0] - ep[0], v_pt[1] - ep[1]) < 0.1 for ep in exempt_pts):
+                        continue
+                    if v_pt in dyn_g:
+                        for nbr in list(dyn_g.neighbors(v_pt)):
+                            dyn_g[v_pt][nbr]["weight"] += 35.0 * scale * (it + 1)
+
+            # Direct penalty around detected crossing points
+            for c_i, c_j, c_pt in crossings:
+                if c_i == leg_idx or c_j == leg_idx:
+                    for g_node in dyn_g.nodes():
+                        if math.hypot(g_node[0] - c_pt[0], g_node[1] - c_pt[1]) < 0.6 * scale:
+                            for nbr in list(dyn_g.neighbors(g_node)):
+                                dyn_g[g_node][nbr]["weight"] += 60.0 * scale * (it + 1)
+
+            # Reroute ripped-up leg
+            new_p = router.route_path(coords[leg_idx], coords[leg_idx + 1], dynamic_graph=dyn_g, simplify=False)
+            if new_p is not None:
+                cand_paths = list(current_paths)
+                cand_paths[leg_idx] = new_p
+
+                old_x = len(_detect_crossings(current_paths, exempt_pts))
+                new_x = len(_detect_crossings(cand_paths, exempt_pts))
+
+                old_len = sum(
+                    sum(math.hypot(p[k+1][0] - p[k][0], p[k+1][1] - p[k][1]) for k in range(len(p) - 1))
+                    for p in [_simplify_collinear(p) for p in current_paths]
+                )
+                new_len = sum(
+                    sum(math.hypot(p[k+1][0] - p[k][0], p[k+1][1] - p[k][1]) for k in range(len(p) - 1))
+                    for p in [_simplify_collinear(p) for p in cand_paths]
+                )
+
+                if new_x < old_x or (new_x == old_x and new_len < old_len):
+                    current_paths = cand_paths
+                    improved_any = True
+                    if new_x == 0:
+                        break
+
+        if not improved_any:
+            break
+
+    return current_paths
+
+
 def _route_territory_ring(
     hub: Dict[str, Any],
     territory_rooms: List[str],
     nodes: Dict[str, Dict[str, Any]],
     router: HananRouter,
     scale: float,
+    existing_rings: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Find optimal tour and rectilinear path legs for a territory's closed ring.
-    Dynamic edge usage and crossing avoidance ensures zero collinear overlap.
+    Dynamic edge usage, crossing avoidance, and Rip-Up and Reroute ensure zero collinear overlap
+    and minimal/zero cable-on-cable crossings.
     """
     hub_pt = (float(hub["point"]["x"]), float(hub["point"]["y"]))
     territory_nodes = [nodes[r_id] for r_id in territory_rooms if r_id in nodes]
@@ -564,23 +704,27 @@ def _route_territory_ring(
     hub_id = hub["id"]
     t_node_ids = [n["id"] for n in territory_nodes]
     node_coords = {n["id"]: (float(n["point"]["x"]), float(n["point"]["y"])) for n in territory_nodes}
+    exempt_pts = [hub_pt] + list(node_coords.values())
+
+    # Pre-populate base graph with existing rings to prevent inter-ring collisions
+    base_dyn_g = router.graph.copy()
+    if existing_rings:
+        for r in existing_rings:
+            for leg in r.get("legs", []):
+                pts = [(float(p["x"]), float(p["y"])) for p in leg.get("polyline", [])]
+                for k in range(len(pts) - 1):
+                    u, v = pts[k], pts[k + 1]
+                    if base_dyn_g.has_edge(u, v):
+                        base_dyn_g[u][v]["weight"] = base_dyn_g[u][v].get("weight", 1.0) + 100.0 * scale
 
     # Single-node territory (e.g. 1 room):
     # Form an open rectangle: Hub -> (N.x, H.y) -> Node -> (H.x, N.y) -> Hub
-    # This ensures a distinct, non-overlapping closed circuit!
     if len(territory_nodes) == 1:
         n_id = t_node_ids[0]
         n_pt = node_coords[n_id]
         
-        # Try both rectangular routes
-        corner1 = (n_pt[0], hub_pt[1])
-        corner2 = (hub_pt[0], n_pt[1])
-        
-        # Test if rect corners are routable
-        leg1 = router.route_path(hub_pt, n_pt)
-        # Use dynamic graph to route return with offset/penalty
-        leg1 = router.route_path(hub_pt, n_pt, simplify=False)
-        dyn_g = router.graph.copy()
+        leg1 = router.route_path(hub_pt, n_pt, dynamic_graph=base_dyn_g, simplify=False)
+        dyn_g = base_dyn_g.copy()
         if leg1:
             for i in range(len(leg1) - 1):
                 u, v = leg1[i], leg1[i + 1]
@@ -603,10 +747,10 @@ def _route_territory_ring(
     # Multi-node territory: test permutations of visit orders
     best_cost = float("inf")
     best_perm: Optional[List[str]] = None
-    best_legs: Optional[List[Dict[str, Any]]] = None
+    best_paths: Optional[List[List[Point2D]]] = None
+    best_coords: Optional[List[Point2D]] = None
 
     perms = list(itertools.permutations(t_node_ids))
-    # If more than 5 nodes (e.g. 20-node config), use nearest neighbor TSP heuristic
     if len(perms) > 120:
         perms = [_nearest_neighbor_tour(hub_pt, territory_nodes)]
 
@@ -614,9 +758,8 @@ def _route_territory_ring(
         seq = [hub_id] + list(perm) + [hub_id]
         coords = [hub_pt] + [node_coords[nid] for nid in perm] + [hub_pt]
 
-        dyn_g = router.graph.copy()
+        dyn_g = base_dyn_g.copy()
         edge_usage: Dict[Tuple[Point2D, Point2D], int] = {}
-        routed_segs: List[Tuple[Point2D, Point2D]] = []
         paths: List[List[Point2D]] = []
         feasible = True
 
@@ -627,34 +770,28 @@ def _route_territory_ring(
                 break
             paths.append(p)
 
-            # Update edge weights in dyn_g to heavily penalize overlap and crossings
+            # Update edge weights in dyn_g to heavily penalize collinear overlap
             for k in range(len(p) - 1):
                 u, v = p[k], p[k + 1]
                 edge_key = tuple(sorted([u, v]))
                 edge_usage[edge_key] = edge_usage.get(edge_key, 0) + 1
                 base_len = math.hypot(v[0] - u[0], v[1] - u[1])
                 if dyn_g.has_edge(u, v):
-                    dyn_g[u][v]["weight"] = base_len + 50.0 * scale * edge_usage[edge_key]
-                routed_segs.append((u, v))
+                    dyn_g[u][v]["weight"] = base_len + 100.0 * scale * edge_usage[edge_key]
 
-            # Penalize crossing perpendicular edges
-            for r_u, r_v in routed_segs[-len(p) + 1:]:
-                # If r_u -> r_v is horizontal at y
-                if abs(r_u[1] - r_v[1]) < 1e-4:
-                    y = r_u[1]
-                    min_x, max_x = min(r_u[0], r_v[0]), max(r_u[0], r_v[0])
-                    # Perpendicular vertical edges crossing y
-                    for u, v in dyn_g.edges():
-                        if abs(u[0] - v[0]) < 1e-4:
-                            x = u[0]
-                            min_y, max_y = min(u[1], v[1]), max(u[1], v[1])
-                            if min_x < x < max_x and min_y < y < max_y:
-                                dyn_g[u][v]["weight"] += 5.0 * scale
+            # Penalize intermediate vertices to discourage crossing this leg
+            for k in range(len(p)):
+                v_pt = p[k]
+                if any(math.hypot(v_pt[0] - ep[0], v_pt[1] - ep[1]) < 0.1 for ep in [b]):
+                    continue
+                if v_pt in dyn_g:
+                    for nbr in list(dyn_g.neighbors(v_pt)):
+                        dyn_g[v_pt][nbr]["weight"] += 25.0 * scale
 
         if not feasible:
             continue
 
-        legs = []
+        x_count = len(_detect_crossings(paths, exempt_pts))
         total_len = 0.0
         total_bends = 0
         for i in range(len(seq) - 1):
@@ -662,20 +799,28 @@ def _route_territory_ring(
             leg_len = sum(math.hypot(simplified[k+1][0]-simplified[k][0], simplified[k+1][1]-simplified[k][1]) for k in range(len(simplified)-1))
             total_len += leg_len
             total_bends += max(0, len(simplified) - 2)
-            legs.append({
-                "from_id": seq[i],
-                "to_id": seq[i + 1],
-                "polyline": [{"x": p[0], "y": p[1]} for p in simplified],
-            })
 
-        cost = total_len + 0.5 * scale * total_bends
+        cost = total_len + 5.0 * scale * x_count + 0.5 * scale * total_bends
         if cost < best_cost:
             best_cost = cost
             best_perm = seq
-            best_legs = legs
+            best_paths = paths
+            best_coords = coords
 
-    if best_perm is None or best_legs is None:
+    if best_perm is None or best_paths is None or best_coords is None:
         return None
+
+    # Priority 2 Optimization: Rip-Up and Reroute to eliminate crossings (X -> 0)
+    refined_paths = _rip_up_and_reroute(best_perm, best_coords, best_paths, router, scale, exempt_pts)
+
+    best_legs = []
+    for i in range(len(best_perm) - 1):
+        simplified = _simplify_collinear(refined_paths[i])
+        best_legs.append({
+            "from_id": best_perm[i],
+            "to_id": best_perm[i + 1],
+            "polyline": [{"x": p[0], "y": p[1]} for p in simplified],
+        })
 
     return {
         "hub_id": hub_id,
