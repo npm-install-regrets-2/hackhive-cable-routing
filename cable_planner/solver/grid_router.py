@@ -14,6 +14,7 @@ Implements:
 from __future__ import annotations
 
 import copy
+import bisect
 import heapq
 import itertools
 import math
@@ -24,6 +25,13 @@ from shapely.geometry import Point, LineString, Polygon
 from shapely.ops import unary_union
 
 Point2D = Tuple[float, float]
+
+# Open passages are free space, not a single door: expose multiple routing lanes
+# and softly prefer a cable gap without changing the scored job-cost formula.
+OPEN_PASSAGE_LANE_SPACING_M = 0.4
+MIN_CABLE_CLEARANCE_M = 0.5
+CLEARANCE_ROUTE_WEIGHT = 3.0
+CLEARANCE_RANK_WEIGHT = 6.0
 
 
 def hub_count_lower_bound(plan: Dict[str, Any]) -> int:
@@ -54,10 +62,19 @@ def _parse_polyline(geom_list: List[Dict[str, Any]]) -> LineString:
 class HananRouter:
     """Rectilinear grid router built on the Hanan grid of floorplan features."""
 
-    def __init__(self, plan: Dict[str, Any], extra_points: Optional[List[Point2D]] = None):
+    def __init__(
+        self,
+        plan: Dict[str, Any],
+        extra_points: Optional[List[Point2D]] = None,
+        cable_wall_clearance_m: float = 0.03,
+    ):
         self.plan = plan
         self.scale = float(plan.get("drawing_units_per_metre", 1.0))
         self.tol = float(plan.get("rules", {}).get("geometry_tolerance", 0.001)) * self.scale
+        if not math.isfinite(cable_wall_clearance_m) or cable_wall_clearance_m < 0:
+            raise ValueError("cable_wall_clearance_m must be finite and nonnegative")
+        self.cable_wall_clearance_m = float(cable_wall_clearance_m)
+        self.cable_wall_clearance = self.cable_wall_clearance_m * self.scale
 
         # Obstacles and boundary
         boundary_dict = plan.get("internal_boundary")
@@ -75,16 +92,44 @@ class HananRouter:
             elif isinstance(g, list) and len(g) >= 2:
                 self.wall_lines.append(_parse_polyline(g))
 
+        # Buffer obstacle geometry so routes cannot run along a wall edge.
+        self.wall_keepouts = [
+            obstacle.buffer(self.cable_wall_clearance)
+            if self.cable_wall_clearance > 0 else obstacle
+            for obstacle in [*self.wall_polys, *self.wall_lines]
+        ]
+
         # Collect Hanan coordinates
         xs: Set[float] = set()
         ys: Set[float] = set()
+        wall_vertical_xs: Set[float] = set()
+        wall_horizontal_ys: Set[float] = set()
+        for obstacle in [*self.wall_polys, *self.wall_lines]:
+            rings = [obstacle.exterior.coords] if isinstance(obstacle, Polygon) else [obstacle.coords]
+            if isinstance(obstacle, Polygon):
+                rings.extend(interior.coords for interior in obstacle.interiors)
+            for coordinates in rings:
+                for a, b in zip(coordinates, coordinates[1:]):
+                    if abs(a[0] - b[0]) <= self.tol:
+                        wall_vertical_xs.add(round((a[0] + b[0]) / 2, 2))
+                    if abs(a[1] - b[1]) <= self.tol:
+                        wall_horizontal_ys.add(round((a[1] + b[1]) / 2, 2))
 
         for r in plan.get("rooms", []):
             if r.get("eligible", False):
                 poly = _parse_polygon(r["geometry"])
                 for x, y in poly.exterior.coords:
-                    xs.add(round(x, 2))
-                    ys.add(round(y, 2))
+                    x, y = round(x, 2), round(y, 2)
+                    if x in wall_vertical_xs and self.cable_wall_clearance > 0:
+                        lane = self.cable_wall_clearance + max(self.tol, 0.001 * self.scale)
+                        xs.update((round(x - lane, 2), round(x + lane, 2)))
+                    else:
+                        xs.add(x)
+                    if y in wall_horizontal_ys and self.cable_wall_clearance > 0:
+                        lane = self.cable_wall_clearance + max(self.tol, 0.001 * self.scale)
+                        ys.update((round(y - lane, 2), round(y + lane, 2)))
+                    else:
+                        ys.add(y)
 
         for n in plan.get("nodes", []):
             xs.add(round(float(n["point"]["x"]), 2))
@@ -99,7 +144,17 @@ class HananRouter:
                 for pt in [p0, p1]:
                     xs.add(round(pt[0], 2))
                     ys.add(round(pt[1], 2))
-                for frac in [0.25, 0.50, 0.75]:
+                fracs = [0.25, 0.50, 0.75]
+                if port.get("kind") == "open_passage":
+                    length = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+                    spacing = OPEN_PASSAGE_LANE_SPACING_M * self.scale
+                    lanes = max(3, int(length / spacing))
+                    inset = min(0.5, (0.2 * self.scale) / length) if length > 0 else 0.0
+                    fracs = [
+                        inset + (1 - 2 * inset) * index / (lanes - 1)
+                        for index in range(lanes)
+                    ]
+                for frac in fracs:
                     lx = p0[0] + frac * (p1[0] - p0[0])
                     ly = p0[1] + frac * (p1[1] - p0[1])
                     xs.add(round(lx, 2))
@@ -121,12 +176,8 @@ class HananRouter:
         ls = LineString([p1, p2])
         if self.internal_boundary and not self.internal_boundary.covers(ls):
             return False
-        for wp in self.wall_polys:
-            inter = ls.intersection(wp)
-            if not inter.is_empty and inter.length > self.tol:
-                return False
-        for wl in self.wall_lines:
-            if ls.crosses(wl) or ls.overlaps(wl):
+        for keepout in self.wall_keepouts:
+            if ls.intersects(keepout):
                 return False
         return True
 
@@ -180,52 +231,63 @@ class HananRouter:
 
         if s_node not in g or e_node not in g:
             return None
-        if not nx.has_path(g, s_node, e_node):
-            return None
-
-        # Priority queue stores: (f_score, cost, current_node, prev_dir, path)
-        open_set: List[Tuple[float, float, Point2D, Tuple[int, int], List[Point2D]]] = []
-        heapq.heappush(open_set, (0.0, 0.0, s_node, (0, 0), [s_node]))
-        
-        # Best cost to state (node, dir)
-        best_costs: Dict[Tuple[Point2D, Tuple[int, int]], float] = {}
+        # A* over (node, incoming direction) states. Parent pointers replace the
+        # per-push path copies, and adjacency is read directly in the hot loop.
+        adj = g._adj
+        bend_cost = bend_penalty * self.scale
+        ex, ey = e_node
+        start_state = (s_node, (0, 0))
+        best_costs: Dict[Tuple[Point2D, Tuple[int, int]], float] = {start_state: 0.0}
+        parents: Dict[
+            Tuple[Point2D, Tuple[int, int]],
+            Optional[Tuple[Point2D, Tuple[int, int]]],
+        ] = {start_state: None}
+        counter = 0
+        open_set: List[Tuple[float, float, Point2D, Tuple[int, int], int]] = [
+            (0.0, 0.0, s_node, (0, 0), counter)
+        ]
 
         while open_set:
-            f, cost, curr, prev_dir, path = heapq.heappop(open_set)
+            f, cost, curr, prev_dir, _ = heapq.heappop(open_set)
+            state = (curr, prev_dir)
 
             if curr == e_node:
-                res = list(path)
+                nodes_rev: List[Point2D] = []
+                cursor: Optional[Tuple[Point2D, Tuple[int, int]]] = state
+                while cursor is not None:
+                    nodes_rev.append(cursor[0])
+                    cursor = parents[cursor]
+                res = nodes_rev[::-1]
                 if start != s_node:
                     res.insert(0, start)
                 if end != e_node:
                     res.append(end)
                 return _simplify_collinear(res) if simplify else res
 
-            state = (curr, prev_dir)
-            if state in best_costs and best_costs[state] < cost - 1e-6:
+            if best_costs[state] < cost - 1e-6:
                 continue
 
-            for neighbor in g.neighbors(curr):
-                edge_data = g[curr][neighbor]
+            cx, cy = curr
+            for neighbor, edge_data in adj[curr].items():
                 edge_wt = edge_data.get("weight", edge_data.get("base_weight", 1.0))
-
-                dx = 1 if neighbor[0] > curr[0] else (-1 if neighbor[0] < curr[0] else 0)
-                dy = 1 if neighbor[1] > curr[1] else (-1 if neighbor[1] < curr[1] else 0)
-                curr_dir = (dx, dy)
-
-                # Bend cost in drawing units (bend_penalty * scale)
-                turn_cost = 0.0
+                nx_, ny_ = neighbor
+                curr_dir = (
+                    1 if nx_ > cx else (-1 if nx_ < cx else 0),
+                    1 if ny_ > cy else (-1 if ny_ < cy else 0),
+                )
+                new_cost = cost + edge_wt
                 if prev_dir != (0, 0) and prev_dir != curr_dir:
-                    turn_cost = bend_penalty * self.scale
-
-                new_cost = cost + edge_wt + turn_cost
+                    new_cost += bend_cost
                 next_state = (neighbor, curr_dir)
-
                 if next_state not in best_costs or new_cost < best_costs[next_state]:
                     best_costs[next_state] = new_cost
-                    # Heuristic: Manhattan distance
-                    h = (abs(e_node[0] - neighbor[0]) + abs(e_node[1] - neighbor[1]))
-                    heapq.heappush(open_set, (new_cost + h, new_cost, neighbor, curr_dir, path + [neighbor]))
+                    parents[next_state] = state
+                    counter += 1
+                    h = abs(ex - nx_) + abs(ey - ny_)
+                    heapq.heappush(
+                        open_set,
+                        (new_cost + h, new_cost, neighbor, curr_dir, counter),
+                    )
 
         return None
 
@@ -298,7 +360,7 @@ def _portal_connectivity(plan: Dict[str, Any], eligible_room_ids: Set[str]) -> n
     return g
 
 
-def solve(plan: Dict[str, Any]) -> Dict[str, Any]:
+def solve(plan: Dict[str, Any], *, cable_wall_clearance_m: float = 0.03) -> Dict[str, Any]:
     """
     Main entry point for capacity-constrained rectilinear closed-ring optimization.
     Guarantees:
@@ -350,7 +412,9 @@ def solve(plan: Dict[str, Any]) -> Dict[str, Any]:
     all_points = [c["point"] for c in candidates] + [
         (float(n["point"]["x"]), float(n["point"]["y"])) for n in plan.get("nodes", [])
     ]
-    router = HananRouter(plan, extra_points=all_points)
+    router = HananRouter(
+        plan, extra_points=all_points, cable_wall_clearance_m=cable_wall_clearance_m
+    )
 
     # Try hub counts starting from lower_bound
     for hub_count in range(lower_bound, len(rooms) + 1):
@@ -648,7 +712,25 @@ def _route_territory_ring(
     if len(perms) > 120:
         perms = [_nearest_neighbor_tour(hub_pt, territory_nodes)]
 
-    for perm in perms:
+    # Route cost J is at least cable length, which is at least the Manhattan
+    # tour length. Try promising orders first and stop when the bound cannot
+    # beat the best fully routed ring. Keep original order for exact ties.
+    def _manhattan_tour_m(order: Tuple[str, ...]) -> float:
+        points = [hub_pt] + [node_coords[node_id] for node_id in order] + [hub_pt]
+        return sum(
+            abs(a[0] - b[0]) + abs(a[1] - b[1])
+            for a, b in zip(points, points[1:])
+        ) / scale
+
+    ordered = sorted(
+        ((_manhattan_tour_m(perm), index, perm) for index, perm in enumerate(perms)),
+        key=lambda item: (item[0], item[1]),
+    )
+    best_index = -1
+
+    for lower_bound_m, perm_index, perm in ordered:
+        if lower_bound_m > best_cost + 1e-9:
+            break
         seq = [hub_id] + list(perm) + [hub_id]
         coords = [hub_pt] + [node_coords[nid] for nid in perm] + [hub_pt]
         exempt_points = [hub_pt, *node_coords.values()]
@@ -670,11 +752,17 @@ def _route_territory_ring(
                 for i in range(leg_count)
             ]
             candidate_ring = {"hub_id": hub_id, "stop_ids": seq, "legs": legs}
-            cost = _ring_route_cost(candidate_ring, scale, exempt_points)
-            if cost < best_cost:
+            cost = (
+                _ring_route_cost(candidate_ring, scale, exempt_points)
+                + CLEARANCE_RANK_WEIGHT * _clearance_shortfall_m(candidate_ring, scale)
+            )
+            if cost < best_cost - 1e-9 or (
+                abs(cost - best_cost) <= 1e-9 and perm_index < best_index
+            ):
                 best_cost = cost
                 best_perm = seq
                 best_legs = legs
+                best_index = perm_index
 
     if best_perm is None or best_legs is None:
         return None
@@ -702,6 +790,99 @@ def _route_territory_ring(
     }
 
 
+class _EdgeIndex:
+    """Static index for finding Hanan edges a routed segment can interact with."""
+
+    def __init__(self, graph: nx.Graph) -> None:
+        horizontal: Dict[float, List[Tuple[float, float, Point2D, Point2D]]] = {}
+        vertical: Dict[float, List[Tuple[float, float, Point2D, Point2D]]] = {}
+        for a, b in graph.edges():
+            if a[1] == b[1]:
+                horizontal.setdefault(a[1], []).append((min(a[0], b[0]), max(a[0], b[0]), a, b))
+            else:
+                vertical.setdefault(a[0], []).append((min(a[1], b[1]), max(a[1], b[1]), a, b))
+        self.horizontal_keys = sorted(horizontal)
+        self.vertical_keys = sorted(vertical)
+        self.horizontal = {key: sorted(edges, key=lambda edge: edge[0]) for key, edges in horizontal.items()}
+        self.vertical = {key: sorted(edges, key=lambda edge: edge[0]) for key, edges in vertical.items()}
+        self.horizontal_los = {key: [edge[0] for edge in edges] for key, edges in self.horizontal.items()}
+        self.vertical_los = {key: [edge[0] for edge in edges] for key, edges in self.vertical.items()}
+
+
+def _lines_in_range(keys: List[float], lo: float, hi: float) -> List[float]:
+    return keys[bisect.bisect_left(keys, lo):bisect.bisect_right(keys, hi)]
+
+
+def _edges_containing(rows, lower_bounds, key: float, coordinate: float):
+    """Yield grid edges on a row/column that contain a crossing coordinate."""
+    edges = rows[key]
+    index = bisect.bisect_right(lower_bounds[key], coordinate)
+    for edge_index in (index - 1, index - 2):
+        if 0 <= edge_index < len(edges):
+            edge = edges[edge_index]
+            if edge[0] <= coordinate <= edge[1]:
+                yield edge
+
+
+def _routed_penalties(
+    index: _EdgeIndex,
+    routed_segments: List[Tuple[Point2D, Point2D]],
+    exempt_points: List[Point2D],
+    scale: float,
+) -> Dict[Tuple[Point2D, Point2D], float]:
+    """Apply the existing interaction penalties using only nearby edges."""
+    tolerance = 0.001 * scale
+    clearance = max(tolerance * 2, MIN_CABLE_CLEARANCE_M * scale)
+    penalties: Dict[Tuple[Point2D, Point2D], float] = {}
+
+    def add(a: Point2D, b: Point2D, value: float) -> None:
+        if value:
+            penalties[(a, b)] = penalties.get((a, b), 0.0) + value
+
+    for c, d in routed_segments:
+        routed_horizontal = abs(c[1] - d[1]) <= tolerance
+        routed_vertical = abs(c[0] - d[0]) <= tolerance
+        if routed_horizontal:
+            lo, hi = sorted((c[0], d[0]))
+            for y in _lines_in_range(index.horizontal_keys, c[1] - clearance, c[1] + clearance):
+                gap = abs(y - c[1])
+                for edge_lo, edge_hi, a, b in index.horizontal[y]:
+                    shared = min(edge_hi, hi) - max(edge_lo, lo)
+                    if shared > 0:
+                        penalty = (
+                            20.0 * shared if gap <= tolerance
+                            else CLEARANCE_ROUTE_WEIGHT * shared * (1.0 - gap / clearance)
+                        )
+                        add(a, b, penalty)
+            for x in _lines_in_range(index.vertical_keys, lo, hi):
+                for _edge_lo, _edge_hi, a, b in _edges_containing(
+                    index.vertical, index.vertical_los, x, c[1]
+                ):
+                    if any(math.dist((x, c[1]), stop) <= tolerance for stop in exempt_points):
+                        continue
+                    add(a, b, 20.0 * scale)
+        elif routed_vertical:
+            lo, hi = sorted((c[1], d[1]))
+            for x in _lines_in_range(index.vertical_keys, c[0] - clearance, c[0] + clearance):
+                gap = abs(x - c[0])
+                for edge_lo, edge_hi, a, b in index.vertical[x]:
+                    shared = min(edge_hi, hi) - max(edge_lo, lo)
+                    if shared > 0:
+                        penalty = (
+                            20.0 * shared if gap <= tolerance
+                            else CLEARANCE_ROUTE_WEIGHT * shared * (1.0 - gap / clearance)
+                        )
+                        add(a, b, penalty)
+            for y in _lines_in_range(index.horizontal_keys, lo, hi):
+                for _edge_lo, _edge_hi, a, b in _edges_containing(
+                    index.horizontal, index.horizontal_los, y, c[0]
+                ):
+                    if any(math.dist((c[0], y), stop) <= tolerance for stop in exempt_points):
+                        continue
+                    add(a, b, 20.0 * scale)
+    return penalties
+
+
 def _route_legs_in_order(
     router: HananRouter,
     coords: List[Point2D],
@@ -711,6 +892,9 @@ def _route_legs_in_order(
 ) -> Optional[Dict[int, List[Point2D]]]:
     """Route each leg with penalties for meeting already routed cable."""
     graph = router.graph.copy()
+    index = getattr(router, "_edge_index", None)
+    if index is None:
+        index = router._edge_index = _EdgeIndex(router.graph)
     paths: Dict[int, List[Point2D]] = {}
     for leg_index in construction_order:
         path = router.route_path(coords[leg_index], coords[leg_index + 1], dynamic_graph=graph)
@@ -718,11 +902,7 @@ def _route_legs_in_order(
             return None
         paths[leg_index] = path
         routed_segments = [(a, b) for a, b in zip(path, path[1:]) if math.dist(a, b) > 0.001 * scale]
-        for a, b in graph.edges():
-            penalty = sum(
-                _edge_interaction_penalty(a, b, c, d, exempt_points, scale)
-                for c, d in routed_segments
-            )
+        for (a, b), penalty in _routed_penalties(index, routed_segments, exempt_points, scale).items():
             graph[a][b]["weight"] += penalty
     return paths
 
@@ -756,6 +936,33 @@ def _edge_interaction_penalty(
     if any(math.dist(point, stop) <= 0.001 * scale for stop in exempt_points):
         return 0.0
     return 20.0 * scale
+
+
+def _clearance_shortfall_m(ring: Dict[str, Any], scale: float) -> float:
+    """Softly measure parallel run length closer than MIN_CABLE_CLEARANCE_M."""
+    tolerance = 0.001 * scale
+    clearance = MIN_CABLE_CLEARANCE_M * scale
+    segments: List[Tuple[bool, float, float, float]] = []
+    for leg in ring["legs"]:
+        points = [(float(point["x"]), float(point["y"])) for point in leg["polyline"]]
+        for a, b in zip(points, points[1:]):
+            if math.dist(a, b) <= tolerance:
+                continue
+            if a[1] == b[1]:
+                segments.append((True, a[1], min(a[0], b[0]), max(a[0], b[0])))
+            else:
+                segments.append((False, a[0], min(a[1], b[1]), max(a[1], b[1])))
+
+    shortfall = 0.0
+    for index, (horizontal, fixed, lo, hi) in enumerate(segments):
+        for other_horizontal, other_fixed, other_lo, other_hi in segments[index + 1:]:
+            gap = abs(fixed - other_fixed)
+            if horizontal != other_horizontal or gap <= tolerance or gap >= clearance:
+                continue
+            parallel_length = min(hi, other_hi) - max(lo, other_lo)
+            if parallel_length > 0:
+                shortfall += parallel_length * (1.0 - gap / clearance)
+    return shortfall / scale
 
 
 def _ring_route_cost(

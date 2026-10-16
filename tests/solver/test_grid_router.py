@@ -1,11 +1,14 @@
 import json
 from pathlib import Path
 import pytest
+import networkx as nx
+from cable_planner.solver import grid_router as grid_router_module
 from jsonschema import Draft202012Validator
 
 from cable_planner.solver.grid_router import (
     hub_count_lower_bound, solve, HananRouter, find_legal_hub_candidates,
     _ring_route_cost, _fixed_hub_solution_rank, _partition_connected, _portal_connectivity,
+    _edge_interaction_penalty, _route_legs_in_order, _clearance_shortfall_m,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +54,59 @@ def test_grid_router_with_obstacle(plan):
     assert solution["status"] == "feasible"
     assert len(solution["hubs"]) == 1
     assert len(solution["rings"]) == 1
+
+
+def test_indexed_route_penalties_match_full_edge_scan(monkeypatch):
+    # Isolate the original crossing/overlap penalties from the later soft
+    # near-parallel clearance preference.
+    monkeypatch.setattr(grid_router_module, "MIN_CABLE_CLEARANCE_M", 0.0)
+    graph = nx.Graph()
+    edges = [
+        ((0.0, 0.0), (1.0, 0.0)), ((1.0, 0.0), (2.0, 0.0)),
+        ((1.0, -1.0), (1.0, 0.0)), ((1.0, 0.0), (1.0, 1.0)),
+        ((0.0, 0.1), (1.0, 0.1)),
+    ]
+    graph.add_edges_from((a, b, {"weight": 1.0, "base_weight": 1.0}) for a, b in edges)
+    first_path = [(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)]
+    second_path = [(1.0, -1.0), (1.0, 0.0), (1.0, 1.0)]
+
+    class FixedPathRouter:
+        def __init__(self):
+            self.graph = graph
+            self.calls = []
+
+        def route_path(self, start, end, dynamic_graph=None):
+            self.calls.append({(a, b): data["weight"] for a, b, data in dynamic_graph.edges(data=True)})
+            return first_path if len(self.calls) == 1 else second_path
+
+    router = FixedPathRouter()
+    _route_legs_in_order(router, [(0.0, 0.0), (2.0, 0.0), (1.0, 1.0)], (0, 1), [], 10.0)
+
+    expected = graph.copy()
+    routed_segments = list(zip(first_path, first_path[1:]))
+    for a, b in expected.edges():
+        expected[a][b]["weight"] += sum(
+            _edge_interaction_penalty(a, b, c, d, [], 10.0)
+            for c, d in routed_segments
+        )
+    assert router.calls[1] == pytest.approx(
+        {(a, b): expected[a][b]["weight"] for a, b in expected.edges()}
+    )
+
+
+def test_open_passage_adds_distributed_routing_lanes(plan):
+    plan["portals"][1]["segment"] = [{"x": 12, "y": 0.5}, {"x": 12, "y": 4.5}]
+    router = HananRouter(plan, cable_wall_clearance_m=0)
+    passage_lanes = [y for y in router.ys if 0.5 < y < 4.5]
+    assert len(passage_lanes) >= 8
+
+
+def test_clearance_shortfall_is_a_soft_rank_only_measure():
+    ring = {"legs": [
+        {"polyline": [{"x": 0, "y": 0}, {"x": 10, "y": 0}]},
+        {"polyline": [{"x": 0, "y": 2.5}, {"x": 10, "y": 2.5}]},
+    ]}
+    assert _clearance_shortfall_m(ring, scale=10) == pytest.approx(0.5)
 
 
 def test_plan_13033_compares_connected_partitions_by_checked_cost():
