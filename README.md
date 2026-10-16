@@ -2,6 +2,10 @@
 
 Normalize a trusted ResPlan floor plan, place the minimum feasible number of hubs, route one closed cable ring per hub, and independently verify the result. The solver minimizes hub count first, then `J = L + 5X + O + 0.5B`.
 
+[Launch the Streamlit app](https://hackhive-cable-planner.streamlit.app/)
+
+The hosted app can run the checked-in example plans 13033 and 14433. Local runs can also use a trusted ResPlan archive.
+
 ## Layout
 
 | Path | Purpose |
