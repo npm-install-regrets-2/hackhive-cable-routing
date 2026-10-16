@@ -263,5 +263,5 @@
 - Changed: added `clip_outside_rooms=False` to normalization and the run/preview APIs. When enabled, only rooms that strict mode would reject are intersected with the internal boundary. A clipped result must remain one valid polygon. Updated room geometry, area, fallback-node placement, and portal extraction use the clipped polygon; per-room diagnostics report removed area. The plan picker checkbox is off by default and applies identically to the preview and run.
 - Checked: normalization tests pass (10); explicit local-loader clipping test passes; frontend production build passes; `git diff --check` passes. The full `tests/web/test_app.py` run did not complete in this environment after 60 seconds, while the focused loader test completed successfully.
 - Open: verify the opt-in against plan 993085 with the full local archive and solver, then restart the local service to use the UI change.
-- Next: finish targeted/full test run where feasible, inspect the plan 993085 run, commit, and push to `main` as previously requested.
-- Commit/PR: pending
+- Next: restart the local service and inspect plan 993085 with clipping enabled; the full web test file remains slow in this environment.
+- Commit/PR: `aef1a1b` pushed to `main`
