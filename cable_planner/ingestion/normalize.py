@@ -115,6 +115,7 @@ def _line_parts(value: Any) -> list[LineString]:
 def normalize_plan(
     raw: Mapping[str, Any], *, rules: Rules = Rules(),
     fixed_nodes: Mapping[str, tuple[float, float]] | None = None,
+    clip_outside_rooms: bool = False,
 ) -> NormalizationResult:
     """Normalize a ResPlan dict; fixed_nodes is keyed by stable room ID.
 
@@ -188,10 +189,29 @@ def normalize_plan(
         for room in rooms:
             poly = room_geoms[room["id"]]
             if room["kind"] not in ("balcony", "garden", "pool", "parking") and not boundary.buffer(tolerance).covers(poly):
-                outside_m2 = poly.difference(boundary.buffer(tolerance)).area / scale**2
-                diagnostics.append(_diagnostic("room_outside_boundary",
-                                               f"room extends beyond internal boundary ({outside_m2:.6g} m2 outside)",
-                                               room["id"]))
+                outside_m2 = poly.difference(boundary if clip_outside_rooms else boundary.buffer(tolerance)).area / scale**2
+                if clip_outside_rooms:
+                    clipped_parts = _parts(poly.intersection(boundary))
+                    if len(clipped_parts) != 1 or not clipped_parts[0].is_valid or clipped_parts[0].area <= 0:
+                        diagnostics.append(_diagnostic(
+                            "room_clip_unsupported",
+                            f"clipping would remove or split the room ({outside_m2:.6g} m2 outside)",
+                            room["id"],
+                        ))
+                    else:
+                        poly = clipped_parts[0]
+                        room_geoms[room["id"]] = poly
+                        room["geometry"] = _polygon(poly)
+                        room["area_m2"] = poly.area / scale**2
+                        diagnostics.append(_diagnostic(
+                            "room_clipped_to_boundary",
+                            f"explicit clipping removed {outside_m2:.6g} m2 outside; clipped area is {room['area_m2']:.6g} m2",
+                            room["id"],
+                        ))
+                else:
+                    diagnostics.append(_diagnostic("room_outside_boundary",
+                                                   f"room extends beyond internal boundary ({outside_m2:.6g} m2 outside)",
+                                                   room["id"]))
             if room["eligible"] and room["area_m2"] > rules.max_area_m2_per_hub + rules.geometry_tolerance_m:
                 diagnostics.append(_diagnostic("room_over_capacity", "single eligible room exceeds hub area capacity", room["id"]))
     else:
@@ -325,7 +345,7 @@ def normalize_plan(
             diagnostics.append(_diagnostic("disconnected_eligible_rooms", "eligible rooms lack verified portal connectivity", *unreachable))
 
     fatal = {"invalid_scale", "unusable_geometry", "unsupported_boundary", "no_eligible_rooms",
-             "room_outside_boundary", "room_over_capacity", "invalid_fixed_node", "unknown_fixed_node_room",
+             "room_outside_boundary", "room_clip_unsupported", "room_over_capacity", "invalid_fixed_node", "unknown_fixed_node_room",
              "duplicate_fixed_nodes"}
     if any(item["code"] in fatal for item in diagnostics):
         return NormalizationResult(None, tuple(diagnostics))

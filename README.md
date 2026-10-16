@@ -23,7 +23,7 @@ npm --prefix frontend run dev
 
 Open `http://localhost:5173`. Vite proxies `/api` to FastAPI. The API also serves the production frontend at `http://localhost:8000` after `npm --prefix frontend run build`.
 
-Local mode reads `archive/ResPlan.pkl` and `archive/split.json` in this checkout or its parent directory. Set `RESPLAN_ARCHIVE_PATH` and `RESPLAN_SPLIT_PATH` to other **trusted server-side files** if needed; the browser cannot upload a pickle or select arbitrary server paths. The first local lookup loads the archive into a process cache, so its load time may be much longer than later lookups.
+Local mode reads `archive/ResPlan.pkl` and `archive/split.json` in this checkout or its parent directory. Set `RESPLAN_ARCHIVE_PATH` and `RESPLAN_SPLIT_PATH` to other **trusted server-side files** if needed; the browser cannot upload a pickle or select arbitrary server paths. The first local lookup loads the archive into a process cache, so its load time may be much longer than later lookups. The plan picker can optionally **Clip rooms to internal boundary** when raw room polygons extend outside it. This is off by default because clipping changes room areas and can change the result; preview and Run use the same setting, and the run diagnostics report each clipped room and area removed. Clipping that would split or erase a room remains an error.
 
 For a single-container build:
 

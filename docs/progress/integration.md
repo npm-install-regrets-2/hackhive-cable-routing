@@ -254,3 +254,14 @@
 - Open: the local development server must reload/restart to use the updated renderer.
 - Next: run verification and reload the local service.
 - Commit/PR: pending
+
+## 2026-10-17 — Add opt-in internal-boundary clipping
+
+- Status: implemented; focused tests and frontend build pass
+- Changed: `cable_planner/ingestion/normalize.py`, `cable_planner/web/app.py`, `frontend/src/App.tsx`, `frontend/src/style.css`, `tests/ingestion/test_normalize.py`, `tests/web/test_app.py`, `README.md`
+- Why: plan 993085 has eligible room polygons extending beyond the internal boundary; the selected policy is explicit opt-in clipping because it changes geometry and scoring.
+- Changed: added `clip_outside_rooms=False` to normalization and the run/preview APIs. When enabled, only rooms that strict mode would reject are intersected with the internal boundary. A clipped result must remain one valid polygon. Updated room geometry, area, fallback-node placement, and portal extraction use the clipped polygon; per-room diagnostics report removed area. The plan picker checkbox is off by default and applies identically to the preview and run.
+- Checked: normalization tests pass (10); explicit local-loader clipping test passes; frontend production build passes; `git diff --check` passes. The full `tests/web/test_app.py` run did not complete in this environment after 60 seconds, while the focused loader test completed successfully.
+- Open: verify the opt-in against plan 993085 with the full local archive and solver, then restart the local service to use the UI change.
+- Next: finish targeted/full test run where feasible, inspect the plan 993085 run, commit, and push to `main` as previously requested.
+- Commit/PR: pending

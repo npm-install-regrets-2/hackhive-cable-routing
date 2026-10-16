@@ -75,6 +75,7 @@ export default function App() {
   const [elapsed, setElapsed] = useState(0)
   const [started, setStarted] = useState(0)
   const [jsonTab, setJsonTab] = useState<'submission' | 'development'>('submission')
+  const [clipOutsideRooms, setClipOutsideRooms] = useState(false)
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -114,7 +115,7 @@ export default function App() {
     try {
       const data = await api<RunResult>('/api/runs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: 'local', plan_id: selected }),
+        body: JSON.stringify({ source: 'local', plan_id: selected, clip_outside_rooms: clipOutsideRooms }),
       })
       setResult(data)
       setJsonTab('submission')
@@ -127,7 +128,7 @@ export default function App() {
   }
 
   const metrics = result?.validation.recomputed_metrics
-  const previewUrl = `/api/plans/${selected}/preview?source=local`
+  const previewUrl = `/api/plans/${selected}/preview?source=local&clip_outside_rooms=${clipOutsideRooms}`
   const candidates = (catalog?.results ?? []).filter(item => query.length > 0 || !presets.includes(item.id))
 
   return <div className="page-shell">
@@ -155,6 +156,7 @@ export default function App() {
           <label className="search-label" htmlFor="plan-search">FIND A PLAN ID</label>
           <div className="search-wrap"><span aria-hidden="true">⌕</span><input id="plan-search" type="search" inputMode="numeric" placeholder="Search split.json IDs" value={query} onChange={event => setQuery(event.target.value)} disabled={busy} /></div>
           <div className="search-results" aria-label="Matching plan IDs">{candidates.slice(0, 24).map(item => <button key={item.id} type="button" onClick={() => choose(item.id)} aria-pressed={selected === item.id}>{item.id}<span>{item.split}</span></button>)}{query && catalog?.total === 0 && <p>No matching ID in split.json.</p>}{catalog && catalog.total > 24 && <small>{catalog.total} matches · showing the first 24. Keep typing to narrow.</small>}</div>
+          <label className="clip-option"><input type="checkbox" checked={clipOutsideRooms} disabled={busy} onChange={event => { setClipOutsideRooms(event.target.checked); setResult(null); setError(null) }} /><span><strong>Clip rooms to internal boundary</strong><small>Opt in to trim out-of-bound room geometry. This changes room areas and may change the solver result. Off by default.</small></span></label>
           <button className="run-button" type="button" onClick={run} disabled={busy || !catalog?.sources.includes('local')}>{busy ? <><span className="spinner" /> RUNNING · {number(elapsed, 1)} S</> : <>RUN PLAN {selected} <span>↗</span></>}</button>
           <p className="picker-foot">Fixed nodes may be development fallbacks. The checker verifies every result independently.</p>
         </aside>

@@ -123,6 +123,25 @@ def test_outside_and_narrow_room_fragments_have_measured_diagnostics():
                and "maximum room-boundary clearance" in d["message"] for d in narrow)
 
 
+def test_outside_room_clipping_is_explicit_and_updates_plan_geometry():
+    raw = fixture()
+    raw["living"] = box(-2, 0, 10, 10)
+
+    strict = normalize_plan(raw)
+    assert strict.plan is None
+    assert any(item["code"] == "room_outside_boundary" for item in strict.diagnostics)
+
+    clipped = normalize_plan(raw, clip_outside_rooms=True)
+    assert clipped.ok, clipped.diagnostics
+    validate(clipped.plan)
+    living = next(room for room in clipped.plan["rooms"] if room["id"] == "room:living:000")
+    assert living["area_m2"] == 25
+    assert min(point["x"] for point in living["geometry"]["exterior"]) == 0
+    diagnostic = next(item for item in clipped.diagnostics if item["code"] == "room_clipped_to_boundary")
+    assert diagnostic["entity_ids"] == ["room:living:000"]
+    assert "5 m2 outside" in diagnostic["message"]
+
+
 def test_wall_blocks_open_passage_and_missing_door_warns():
     raw = fixture()
     raw["door"] = None
