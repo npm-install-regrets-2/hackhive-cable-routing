@@ -117,3 +117,13 @@
 - Open: none.
 - Next: none.
 - Commit/PR: `eb0a343`
+
+## 2026-10-16 — Document Windows local setup with the Python launcher
+
+- Status: complete
+- Changed: `README.md`; document `py -3 -m venv`, the environment's Python executable, pip bootstrap for an existing pip-less environment, local archive selection, and MSYS2 interpreter note.
+- Why: PowerShell resolved bare `python` to MSYS2's Python, which has no pip.
+- Checked: verified the Windows Python launcher and existing project environment paths in the workspace.
+- Open: none.
+- Next: none.
+- Commit/PR: pending

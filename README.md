@@ -22,11 +22,25 @@ The hosted app can run the checked-in example plans 13033 and 14433. Local runs 
 
 To use your own `ResPlan.pkl`, run the app on the same computer (or server) that can read that file. A path entered in the hosted app refers to Streamlit's server, not to your computer, so the hosted app only offers the checked-in examples.
 
-From the repository root, install the project in an environment with Python 3.11 or newer and start Streamlit:
+From the repository root, use the Windows Python launcher to create a virtual environment and install the project. This avoids accidentally using an MSYS2 `python` that may not include `pip`:
 
 ```powershell
-python -m pip install -e .
-python -m streamlit run cable_planner/demo/app.py
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m streamlit run cable_planner/demo/app.py
+```
+
+If `.venv` already exists but reports `No module named pip`, bootstrap pip in that environment and install the project:
+
+```powershell
+.\.venv\Scripts\python.exe -m ensurepip --upgrade
+.\.venv\Scripts\python.exe -m pip install -e .
+```
+
+If the dependencies are already installed, start the app directly:
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run cable_planner/demo/app.py
 ```
 
 In the app at `http://localhost:8501`:
@@ -40,7 +54,13 @@ The archive path defaults to `../archive/ResPlan.pkl` or `./archive/ResPlan.pkl`
 For a command-line run:
 
 ```powershell
-python -m cable_planner.demo.end_to_end --plan-id 13033 --archive E:\dev\HackHive\archive\ResPlan.pkl --render overlay.png
+.\.venv\Scripts\python.exe -m cable_planner.demo.end_to_end --plan-id 13033 --archive E:\dev\HackHive\archive\ResPlan.pkl --render overlay.png
 ```
 
-Run the tests with `python -m pytest tests`. Source code lives in `cable_planner`; the older developer-named folders have been consolidated into that package. The bundled archive does not contain organizer-provided fixed node points, so its generated nodes are deterministic development fallbacks.
+Run the tests with:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests
+```
+
+Source code lives in `cable_planner`; the older developer-named folders have been consolidated into that package. The bundled archive does not contain organizer-provided fixed node points, so its generated nodes are deterministic development fallbacks.
