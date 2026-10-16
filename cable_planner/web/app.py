@@ -36,7 +36,6 @@ DIST = ROOT / "frontend" / "dist"
 class RunRequest(BaseModel):
     source: Literal["bundled", "local"]
     plan_id: int
-    clip_outside_rooms: bool = False
 
 
 app = FastAPI(title="Cable Ring Planner Demo")
@@ -99,7 +98,7 @@ def _trusted_archive_index(path: str, modified_ns: int) -> dict[int, dict[str, A
     return {item["id"]: item for item in items if isinstance(item, dict) and isinstance(item.get("id"), int)}
 
 
-def _load_plan(source: str, plan_id: int, *, clip_outside_rooms: bool = False) -> tuple[dict[str, Any], dict[str, float | None], list[dict[str, Any]]]:
+def _load_plan(source: str, plan_id: int) -> tuple[dict[str, Any], dict[str, float | None]]:
     if source == "bundled":
         if plan_id not in PRESETS or not _bundled_path(plan_id).is_file():
             raise _error(404, "plan_not_found", f"Bundled plan {plan_id} is unavailable.")
@@ -108,7 +107,7 @@ def _load_plan(source: str, plan_id: int, *, clip_outside_rooms: bool = False) -
             plan = json.loads(_bundled_path(plan_id).read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise _error(500, "bundled_plan_invalid", str(exc)) from exc
-        return plan, {"load_s": time.perf_counter() - started, "normalize_s": None}, []
+        return plan, {"load_s": time.perf_counter() - started, "normalize_s": None}
 
     if source != "local":
         raise _error(422, "invalid_source", "Source must be bundled or local.")
@@ -122,11 +121,11 @@ def _load_plan(source: str, plan_id: int, *, clip_outside_rooms: bool = False) -
         raise _error(422, "plan_load_failed", str(exc)) from exc
     load_s = time.perf_counter() - started
     started = time.perf_counter()
-    normalized = normalize_plan(raw, clip_outside_rooms=clip_outside_rooms)
+    normalized = normalize_plan(raw)
     normalize_s = time.perf_counter() - started
     if not normalized.ok:
         raise _error(422, "normalization_failed", f"Plan {plan_id} has unusable geometry.", list(normalized.diagnostics))
-    return normalized.plan, {"load_s": load_s, "normalize_s": normalize_s}, list(normalized.diagnostics)
+    return normalized.plan, {"load_s": load_s, "normalize_s": normalize_s}
 
 
 def _png_bytes(figure: plt.Figure) -> bytes:
@@ -166,8 +165,8 @@ def catalog(source: Literal["bundled", "local"] = "bundled", q: str = "", limit:
 
 
 @app.get("/api/plans/{plan_id}/preview")
-def preview(plan_id: int, source: Literal["bundled", "local"] = "bundled", clip_outside_rooms: bool = False) -> Response:
-    plan, _, _ = _load_plan(source, plan_id, clip_outside_rooms=clip_outside_rooms)
+def preview(plan_id: int, source: Literal["bundled", "local"] = "bundled") -> Response:
+    plan, _ = _load_plan(source, plan_id)
     # Use identical renderer settings to the input image returned after a run.
     return Response(
         _png_bytes(render_input_plan(plan)),
@@ -179,9 +178,7 @@ def preview(plan_id: int, source: Literal["bundled", "local"] = "bundled", clip_
 @app.post("/api/runs")
 def run(request: RunRequest) -> dict[str, Any]:
     started_total = time.perf_counter()
-    plan, timings, normalization_diagnostics = _load_plan(
-        request.source, request.plan_id, clip_outside_rooms=request.clip_outside_rooms,
-    )
+    plan, timings = _load_plan(request.source, request.plan_id)
     started = time.perf_counter()
     try:
         solution = solve(plan)
@@ -220,7 +217,7 @@ def run(request: RunRequest) -> dict[str, Any]:
         "status": solution["status"],
         "lower_bound_hubs": solution.get("lower_bound_hubs"),
         "validation": report.to_dict(),
-        "diagnostics": normalization_diagnostics + solution.get("diagnostics", []),
+        "diagnostics": solution.get("diagnostics", []),
         "timings": {key: round(value, 4) if value is not None else None for key, value in timings.items()},
         "input_image": input_image,
         "output_image": output_image,

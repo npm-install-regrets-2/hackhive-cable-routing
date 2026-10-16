@@ -8,9 +8,7 @@ import json
 from pathlib import Path
 
 import jsonschema
-import pytest
 from PIL import Image
-from shapely.geometry import box
 from fastapi.testclient import TestClient
 
 from cable_planner.export import format_official_submission
@@ -75,7 +73,7 @@ def test_unusable_local_geometry_returns_structured_diagnostics(tmp_path, monkey
     monkeypatch.setenv("RESPLAN_ARCHIVE_PATH", str(archive))
     monkeypatch.setenv("RESPLAN_SPLIT_PATH", str(split))
     monkeypatch.setattr(web, "_trusted_archive_index", lambda *_: {42: {"id": 42}})
-    monkeypatch.setattr(web, "normalize_plan", lambda _raw, **_options: NormalizationResult(None, (
+    monkeypatch.setattr(web, "normalize_plan", lambda _raw: NormalizationResult(None, (
         {"code": "bad_geometry", "message": "Unusable boundary", "entity_ids": ["42"]},
     )))
     response = client.post("/api/runs", json={"source": "local", "plan_id": 42})
@@ -85,30 +83,6 @@ def test_unusable_local_geometry_returns_structured_diagnostics(tmp_path, monkey
         "message": "Plan 42 has unusable geometry.",
         "diagnostics": [{"code": "bad_geometry", "message": "Unusable boundary", "entity_ids": ["42"]}],
     }
-
-
-def test_local_plan_loader_uses_explicit_clipping_option(tmp_path, monkeypatch):
-    archive = tmp_path / "ResPlan.pkl"
-    split = tmp_path / "split.json"
-    archive.write_bytes(b"trusted fixture placeholder")
-    split.write_text(json.dumps({"train": [42]}), encoding="utf-8")
-    monkeypatch.setenv("RESPLAN_ARCHIVE_PATH", str(archive))
-    monkeypatch.setenv("RESPLAN_SPLIT_PATH", str(split))
-    monkeypatch.setattr(web, "_trusted_archive_index", lambda *_: {42: {
-        "id": 42, "inner": box(0, 0, 20, 10), "area": 50.0,
-        "living": box(-2, 0, 10, 10), "bedroom": box(10, 0, 20, 10),
-        "door": box(9.5, 4, 10.5, 6), "wall": None, "window": None,
-    }})
-
-    with pytest.raises(web.HTTPException) as failure:
-        web._load_plan("local", 42)
-    assert failure.value.status_code == 422
-    assert failure.value.detail["diagnostics"][0]["code"] == "room_outside_boundary"
-
-    plan, timings, diagnostics = web._load_plan("local", 42, clip_outside_rooms=True)
-    assert plan["rooms"][0]["area_m2"] == 25
-    assert diagnostics[0]["code"] == "room_clipped_to_boundary"
-    assert timings["normalize_s"] is not None
 
 
 def test_checked_run_exports_development_and_provisional_submission(monkeypatch):
