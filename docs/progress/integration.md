@@ -127,3 +127,13 @@
 - Open: none.
 - Next: none.
 - Commit/PR: pending
+
+## 2026-10-16 — Keep hubs separated from fixed nodes and render single-node loops
+
+- Status: in progress
+- Changed: `cable_planner/solver/grid_router.py`, `cable_planner/visualization/renderer.py`, `tests/solver/test_grid_router.py`
+- Why: prevent hub/node overlap and give single-node territories a visible closed ring when a legal offset exists.
+- Checked: `git apply --check` passed; patch applied cleanly. No tests run.
+- Open: validate the changed solutions and updated route-cost bounds with the owned solver and independent-validator tests.
+- Next: run focused tests and review the resulting changes.
+- Commit/PR: pending

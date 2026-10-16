@@ -456,7 +456,7 @@ def render_solution_overlay(
         )
         overlaps_node = (
             nearest_node is not None
-            and math.dist(nearest_node, (hx_val, hy_val)) < 0.5 * hub_size
+            and math.dist(nearest_node, (hx_val, hy_val)) < 1.0 * hub_size
         )
         hub_label = f"H{hub_ids.index(h_id) + 1}"
         if overlaps_node:

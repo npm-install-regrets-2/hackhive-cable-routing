@@ -33,6 +33,15 @@ MIN_CABLE_CLEARANCE_M = 0.5
 CLEARANCE_ROUTE_WEIGHT = 3.0
 CLEARANCE_RANK_WEIGHT = 6.0
 
+# A hub sitting on top of its only node gives a ring too small to see. For
+# single-node territories the hub is moved off the node by this distance (first
+# legal entry wins) as a diagonal rectangle loop (O = 0, J = 4d + 2 for per-axis offset d).
+# Set to () to fall back to grid routing.
+SINGLE_NODE_HUB_OFFSETS_M = (0.6, 0.5, 0.4)
+ALLOW_RETRACE_STUB = False  # overlap is penalised (O); True also allows an out-and-back stub when cheaper
+# A hub never sits on a node: every hub keeps at least this distance from every node.
+HUB_NODE_MIN_SEPARATION_M = 0.6
+
 
 def hub_count_lower_bound(plan: Dict[str, Any]) -> int:
     """Return the simultaneous area/node capacity lower bound."""
@@ -319,10 +328,12 @@ def find_legal_hub_candidates(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
     tol_units = tol_m * scale
 
     candidates = []
+    poly_by_room: Dict[str, Any] = {}
     for r in plan.get("rooms", []):
         if not r.get("eligible", False):
             continue
         poly = _parse_polygon(r["geometry"])
+        poly_by_room[r["id"]] = poly
         eroded = poly.buffer(-clearance_units)
         if not eroded.is_empty:
             # Pick representative point inside eroded safe region
@@ -345,6 +356,47 @@ def find_legal_hub_candidates(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "clearance": 0.0,
                 "area_m2": float(r.get("area_m2", 0.0))
             })
+    return _separate_hubs_from_nodes(plan, candidates, poly_by_room, clearance_units, tol_units, scale)
+
+
+def _separate_hubs_from_nodes(
+    plan: Dict[str, Any],
+    candidates: List[Dict[str, Any]],
+    poly_by_room: Dict[str, Any],
+    clearance_units: float,
+    tol_units: float,
+    scale: float,
+) -> List[Dict[str, Any]]:
+    """Move any hub candidate that sits closer than the minimum separation to a node."""
+    sep = HUB_NODE_MIN_SEPARATION_M * scale
+    node_pts = [(float(n["point"]["x"]), float(n["point"]["y"])) for n in plan.get("nodes", [])]
+    if sep <= 0 or not node_pts:
+        return candidates
+    centroid = (sum(p[0] for p in node_pts) / len(node_pts), sum(p[1] for p in node_pts) / len(node_pts))
+
+    def far_enough(pt: Point2D) -> bool:
+        return all(math.dist(pt, n) + tol_units >= sep for n in node_pts)
+
+    for cand in candidates:
+        pt = cand["point"]
+        if far_enough(pt):
+            continue
+        poly = poly_by_room.get(cand["room_id"])
+        if poly is None:
+            continue
+        own = min(node_pts, key=lambda n: math.dist(n, pt))
+        options = []
+        for ang in range(0, 360, 45):
+            rad = math.radians(ang)
+            for step in (1.0, 1.15, 1.4):
+                h = (round(own[0] + step * sep * math.cos(rad), 2), round(own[1] + step * sep * math.sin(rad), 2))
+                gap = poly.boundary.distance(Point(h))
+                if poly.contains(Point(h)) and gap + tol_units >= clearance_units and far_enough(h):
+                    options.append((math.dist(h, centroid), -gap, h, gap))
+                    break
+        if options:
+            options.sort(key=lambda o: o[:2])
+            cand["point"], cand["clearance"] = options[0][2], options[0][3]
     return candidates
 
 
@@ -650,6 +702,79 @@ def _partition_connected(
     return valid_partitions
 
 
+def _offset_hub_ring(
+    hub: Dict[str, Any],
+    node_id: str,
+    n_pt: Point2D,
+    room_id: str,
+    router: "HananRouter",
+    scale: float,
+) -> Optional[Dict[str, Any]]:
+    """Move the hub off its only node so the ring is visible, picking the cheaper shape.
+
+    Two shapes are scored with the real route cost J and the cheaper one wins:
+      * stub      - hub on the node's row/column, cable goes out and is retraced back
+                    (L = 2d, O = d, B = 2  ->  J = 3d + 1); drawn with a two-way arrow.
+      * rectangle - hub diagonal to the node, closed loop with no overlap
+                    (L = 4d, O = 0, B = 4  ->  J = 4d + 2).
+    The largest offset in SINGLE_NODE_HUB_OFFSETS_M that has a legal placement is used.
+    Returns None if none is legal (caller falls back to grid routing).
+    """
+    room = next((r for r in router.plan.get("rooms", []) if r["id"] == room_id), None)
+    if room is None or not SINGLE_NODE_HUB_OFFSETS_M:
+        return None
+    poly = _parse_polygon(room["geometry"])
+    clearance = float(router.plan.get("rules", {}).get("node_wall_clearance_m", 0.5)) * scale
+    tol = router.tol
+    cover = poly.buffer(tol)
+    hub_id = hub["id"]
+
+    def legal(h: Point2D, edges: List[Tuple[Point2D, Point2D]]) -> Optional[float]:
+        wall_gap = poly.boundary.distance(Point(h))
+        if not poly.contains(Point(h)) or wall_gap + tol < clearance:
+            return None
+        if not all(cover.covers(LineString(e)) and router._edge_is_valid(*e) for e in edges):
+            return None
+        return wall_gap
+
+    def make_ring(h: Point2D, out: List[Point2D], back: List[Point2D]) -> Dict[str, Any]:
+        return {
+            "hub_id": hub_id,
+            "stop_ids": [hub_id, node_id, hub_id],
+            "legs": [
+                {"from_id": hub_id, "to_id": node_id, "polyline": [{"x": x, "y": y} for x, y in out]},
+                {"from_id": node_id, "to_id": hub_id, "polyline": [{"x": x, "y": y} for x, y in back]},
+            ],
+        }
+
+    for offset_m in SINGLE_NODE_HUB_OFFSETS_M:
+        d = offset_m * scale
+        options: List[Tuple[float, float, Point2D, Dict[str, Any]]] = []
+        for sx, sy in (((1, 0), (-1, 0), (0, 1), (0, -1)) if ALLOW_RETRACE_STUB else ()):  # stub
+            # Keep the shared axis exactly equal to the node's so the stub is truly collinear.
+            h = (round(n_pt[0] + sx * d, 2) if sx else n_pt[0], round(n_pt[1] + sy * d, 2) if sy else n_pt[1])
+            gap = legal(h, [(h, n_pt)])
+            if gap is not None:
+                options.append((0.0, gap, h, make_ring(h, [h, n_pt], [n_pt, h])))
+        for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):          # rectangle
+            h = (round(n_pt[0] + sx * d, 2), round(n_pt[1] + sy * d, 2))
+            c1, c2 = (n_pt[0], h[1]), (h[0], n_pt[1])
+            gap = legal(h, [(h, c1), (c1, n_pt), (n_pt, c2), (c2, h)])
+            if gap is not None:
+                options.append((0.0, gap, h, make_ring(h, [h, c1, n_pt], [n_pt, c2, h])))
+        if not options:
+            continue
+        scored = []
+        for _, gap, h, ring in options:
+            cost = _ring_route_cost(ring, scale, [h, n_pt])
+            scored.append((round(cost, 6), -gap, h, ring))
+        scored.sort(key=lambda item: item[:3])
+        _, _, h, ring = scored[0]
+        hub["point"] = {"x": h[0], "y": h[1]}
+        return ring
+    return None
+
+
 def _route_territory_ring(
     hub: Dict[str, Any],
     territory_rooms: List[str],
@@ -674,8 +799,12 @@ def _route_territory_ring(
     if len(territory_nodes) == 1:
         n_id = t_node_ids[0]
         n_pt = node_coords[n_id]
-        
-        # Try both rectangular routes
+
+        shifted = _offset_hub_ring(hub, n_id, n_pt, territory_rooms[0], router, scale)
+        if shifted is not None:
+            return shifted
+
+        # Fallback: hub and node co-located, route two distinct rectangular routes
         corner1 = (n_pt[0], hub_pt[1])
         corner2 = (hub_pt[0], n_pt[1])
         
