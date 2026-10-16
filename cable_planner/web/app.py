@@ -7,6 +7,7 @@ import io
 import json
 import os
 import pickle
+import threading
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -15,7 +16,7 @@ from typing import Any, Literal
 import jsonschema
 import matplotlib.pyplot as plt
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -25,6 +26,7 @@ from cable_planner.solver import solve
 from cable_planner.validation.checker import IndependentValidator
 from cable_planner.visualization.renderer import render_input_plan, render_solution_overlay
 from cable_planner.web.architecture import architecture_solids
+from cable_planner.web.run_progress import RunProgress
 
 ROOT = Path(__file__).resolve().parents[2]
 PRESETS = (14433, 13033, 14926)
@@ -38,7 +40,12 @@ class RunRequest(BaseModel):
     plan_id: int
 
 
+class RunReportRequest(BaseModel):
+    result: dict[str, Any]
+
+
 app = FastAPI(title="Cable Ring Planner Demo")
+_ARCHIVE_LOAD_LOCK = threading.Lock()
 
 
 def _configured_path(variable: str, filename: str) -> Path:
@@ -88,7 +95,7 @@ def _bundled_path(plan_id: int) -> Path:
 
 
 @lru_cache(maxsize=2)
-def _trusted_archive_index(path: str, modified_ns: int) -> dict[int, dict[str, Any]]:
+def _cached_archive_index(path: str, modified_ns: int) -> dict[int, dict[str, Any]]:
     """Index the configured trusted pickle once per file version."""
     del modified_ns
     with Path(path).open("rb") as stream:
@@ -98,7 +105,19 @@ def _trusted_archive_index(path: str, modified_ns: int) -> dict[int, dict[str, A
     return {item["id"]: item for item in items if isinstance(item, dict) and isinstance(item.get("id"), int)}
 
 
-def _load_plan(source: str, plan_id: int) -> tuple[dict[str, Any], dict[str, float | None]]:
+def _trusted_archive_index(path: str, modified_ns: int) -> dict[int, dict[str, Any]]:
+    # lru_cache is thread-safe but can execute the wrapped function more than
+    # once on a concurrent cache miss. Serialize cold loads of this large file.
+    with _ARCHIVE_LOAD_LOCK:
+        return _cached_archive_index(path, modified_ns)
+
+
+def _load_plan(
+    source: str,
+    plan_id: int,
+    *,
+    on_normalization_start: Any = None,
+) -> tuple[dict[str, Any], dict[str, float | None]]:
     if source == "bundled":
         if plan_id not in PRESETS or not _bundled_path(plan_id).is_file():
             raise _error(404, "plan_not_found", f"Bundled plan {plan_id} is unavailable.")
@@ -120,6 +139,8 @@ def _load_plan(source: str, plan_id: int) -> tuple[dict[str, Any], dict[str, flo
     except (OSError, KeyError, ValueError) as exc:
         raise _error(422, "plan_load_failed", str(exc)) from exc
     load_s = time.perf_counter() - started
+    if on_normalization_start is not None:
+        on_normalization_start()
     started = time.perf_counter()
     normalized = normalize_plan(raw)
     normalize_s = time.perf_counter() - started
@@ -175,17 +196,41 @@ def preview(plan_id: int, source: Literal["bundled", "local"] = "bundled") -> Re
     )
 
 
-@app.post("/api/runs")
-def run(request: RunRequest) -> dict[str, Any]:
+def _execute_run(request: RunRequest, progress: RunProgress | None = None) -> dict[str, Any]:
     started_total = time.perf_counter()
-    plan, timings = _load_plan(request.source, request.plan_id)
+    if progress is not None:
+        progress.start("load_plan")
+
+    def start_normalization() -> None:
+        if progress is not None:
+            progress.complete("load_plan")
+            progress.start("normalize_plan")
+
+    plan, timings = _load_plan(
+        request.source,
+        request.plan_id,
+        on_normalization_start=(start_normalization if progress is not None and request.source == "local" else None),
+    )
+    if progress is not None:
+        if request.source == "bundled":
+            progress.complete("load_plan")
+            progress.skip("normalize_plan")
+        else:
+            progress.complete("normalize_plan")
+        progress.start("prepare_geometry")
     started = time.perf_counter()
     try:
-        solution = solve(plan)
+        solution = solve(plan, progress_callback=progress.solver_update) if progress is not None else solve(plan)
     except Exception as exc:
         raise _error(500, "solver_failed", str(exc)) from exc
     timings["solve_s"] = time.perf_counter() - started
+    if progress is not None and progress.active_stage is not None:
+        progress.complete(progress.active_stage)
+    if progress is not None:
+        progress.skip_if_upcoming("search")
 
+    if progress is not None:
+        progress.start("validate")
     started = time.perf_counter()
     try:
         report = IndependentValidator().validate(plan, solution)
@@ -199,6 +244,9 @@ def run(request: RunRequest) -> dict[str, Any]:
         checked_solution["metrics"] = report.recomputed_metrics.to_dict()
     development = {"schema_version": "0.1.0", "plan": plan, "solution": checked_solution}
     _validate_development(development)
+    if progress is not None:
+        progress.complete("validate")
+        progress.start("render_export")
     try:
         submission = (format_official_submission(plan, checked_solution, report)
                       if report.is_valid and report.recomputed_metrics is not None
@@ -211,6 +259,8 @@ def run(request: RunRequest) -> dict[str, Any]:
         raise _error(500, "render_export_failed", str(exc)) from exc
     timings["render_export_s"] = time.perf_counter() - started
     timings["total_s"] = time.perf_counter() - started_total
+    if progress is not None:
+        progress.complete("render_export")
     return {
         "source": request.source,
         "plan_id": request.plan_id,
@@ -226,6 +276,68 @@ def run(request: RunRequest) -> dict[str, Any]:
         "submission": submission,
         "fallback_nodes": sum(node.get("source") == "development_fallback" for node in plan.get("nodes", [])),
     }
+
+
+@app.post("/api/runs")
+def run(request: RunRequest) -> dict[str, Any]:
+    return _execute_run(request)
+
+
+def _stream_error(exc: HTTPException) -> dict[str, Any]:
+    if isinstance(exc.detail, dict):
+        return exc.detail
+    return {"code": "run_failed", "message": str(exc.detail), "diagnostics": []}
+
+
+@app.post("/api/runs/stream")
+def run_stream(request: RunRequest) -> StreamingResponse:
+    progress = RunProgress()
+
+    def execute() -> None:
+        try:
+            result = _execute_run(request, progress)
+        except HTTPException as exc:
+            progress.fail(progress.active_stage or "load_plan", _stream_error(exc))
+        except Exception as exc:
+            progress.fail(progress.active_stage or "load_plan", {
+                "code": "run_failed", "message": str(exc), "diagnostics": [],
+            })
+        else:
+            progress.finish(result)
+
+    def events():
+        while True:
+            event = progress.next_event()
+            if event is None:
+                continue
+            yield json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
+            if event["type"] in {"complete", "error"}:
+                break
+
+    threading.Thread(target=execute, name="cable-ring-run", daemon=True).start()
+    return StreamingResponse(events(), media_type="application/x-ndjson", headers={
+        "Cache-Control": "no-store",
+        "X-Accel-Buffering": "no",
+    })
+
+
+@app.post("/api/reports/pdf")
+def pdf_report(request: RunReportRequest) -> Response:
+    try:
+        from cable_planner.web.report import build_pdf_report
+
+        content = build_pdf_report(request.result)
+    except ImportError as exc:
+        raise _error(503, "pdf_dependency_unavailable", "Install the project dependencies to generate PDF reports.") from exc
+    except (ValueError, KeyError, TypeError) as exc:
+        raise _error(422, "invalid_report_data", str(exc)) from exc
+    raw_plan_id = str(request.result.get("plan_id", "run"))
+    safe_plan_id = "".join(char for char in raw_plan_id if char.isalnum() or char in "-_") or "run"
+    filename = f"cable-ring-plan-{safe_plan_id}-report.pdf"
+    return Response(content, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Cache-Control": "no-store",
+    })
 
 
 if DIST.is_dir():

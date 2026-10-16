@@ -5,7 +5,11 @@ from __future__ import annotations
 import copy
 from io import BytesIO
 import json
+import pickle
 from pathlib import Path
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import jsonschema
 from PIL import Image
@@ -65,6 +69,34 @@ def test_local_catalog_uses_split_and_reports_missing_dataset(tmp_path, monkeypa
     assert unavailable.json()["detail"]["code"] == "local_dataset_unavailable"
 
 
+def test_concurrent_cold_archive_lookups_unpickle_only_once(tmp_path, monkeypatch):
+    archive = tmp_path / "ResPlan.pkl"
+    archive.write_bytes(pickle.dumps([{"id": 42}]))
+    modified_ns = archive.stat().st_mtime_ns
+    original_load = web.pickle.load
+    load_count = 0
+    count_lock = threading.Lock()
+
+    def counted_load(stream):
+        nonlocal load_count
+        with count_lock:
+            load_count += 1
+        time.sleep(0.05)
+        return original_load(stream)
+
+    monkeypatch.setattr(web.pickle, "load", counted_load)
+    web._cached_archive_index.cache_clear()
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(
+                lambda _: web._trusted_archive_index(str(archive), modified_ns), range(2)
+            ))
+        assert results == [{42: {"id": 42}}, {42: {"id": 42}}]
+        assert load_count == 1
+    finally:
+        web._cached_archive_index.cache_clear()
+
+
 def test_unusable_local_geometry_returns_structured_diagnostics(tmp_path, monkeypatch):
     archive = tmp_path / "ResPlan.pkl"
     split = tmp_path / "split.json"
@@ -103,6 +135,61 @@ def test_checked_run_exports_development_and_provisional_submission(monkeypatch)
     schema = json.loads((ROOT / "shared" / "schema" / "common.schema.json").read_text(encoding="utf-8"))
     jsonschema.Draft202012Validator(schema).validate(result["development"])
     assert result["development"]["solution"]["metrics"]["route_cost"] == result["validation"]["recomputed_metrics"]["route_cost"]
+
+
+def test_streamed_run_reports_real_stages_and_preserves_sync_result(monkeypatch):
+    saved = _saved(13033)
+
+    def progress_aware_solve(_plan, *, progress_callback=None):
+        if progress_callback is not None:
+            progress_callback("prepare_geometry", {"eligible_rooms": 5, "legal_hub_locations": 5})
+            progress_callback("search", {"hub_count_attempts": 1, "partition_patterns_examined": 24})
+            progress_callback("search", {"partition_patterns_examined": 12, "ring_route_attempts": 3})
+        return copy.deepcopy(saved["solution"])
+
+    monkeypatch.setattr(web, "solve", progress_aware_solve)
+    sync_response = client.post("/api/runs", json={"source": "bundled", "plan_id": 13033})
+    assert sync_response.status_code == 200
+    response = client.post("/api/runs/stream", json={"source": "bundled", "plan_id": 13033})
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    progress_events = [event for event in events if event["type"] == "progress"]
+    terminal = events[-1]
+    assert terminal["type"] == "complete", terminal
+    assert terminal["result"]["development"] == sync_response.json()["development"]
+    assert set(terminal["result"]) == set(sync_response.json())
+    last_stages = terminal["state"]["stages"]
+    assert [(stage["id"], stage["status"]) for stage in last_stages] == [
+        ("load_plan", "completed"), ("normalize_plan", "skipped"),
+        ("prepare_geometry", "completed"), ("search", "completed"),
+        ("validate", "completed"), ("render_export", "completed"),
+    ]
+    assert any(event["active_stage"] == "search" for event in progress_events)
+    counters = terminal["state"]["counters"]
+    assert counters["partition_patterns_examined"] == 36
+    assert counters["ring_route_attempts"] == 3
+    assert counters["eligible_rooms"] == 5
+    for key in ("partition_patterns_examined", "ring_route_attempts", "candidate_combinations_evaluated"):
+        observed = [event["counters"][key] for event in progress_events if key in event["counters"]]
+        assert observed == sorted(observed)
+
+
+def test_streamed_solver_failure_identifies_active_stage(monkeypatch):
+    def fail_during_search(_plan, *, progress_callback=None):
+        if progress_callback is not None:
+            progress_callback("prepare_geometry", {"eligible_rooms": 3})
+            progress_callback("search", {"ring_route_attempts": 1})
+        raise RuntimeError("route failed")
+
+    monkeypatch.setattr(web, "solve", fail_during_search)
+    response = client.post("/api/runs/stream", json={"source": "bundled", "plan_id": 13033})
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    terminal = events[-1]
+    assert terminal["type"] == "error"
+    assert terminal["stage"] == "search"
+    assert terminal["error"]["code"] == "solver_failed"
 
 
 def test_invalid_solution_has_diagnostics_and_no_submission(monkeypatch):

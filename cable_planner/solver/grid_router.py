@@ -18,13 +18,16 @@ import bisect
 import heapq
 import itertools
 import math
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import networkx as nx
 from shapely.geometry import Point, LineString, Polygon
 from shapely.ops import unary_union
 
 Point2D = Tuple[float, float]
+ProgressCallback = Callable[[str, int], None]
+A_STAR_PROGRESS_BATCH = 512
+PARTITION_PROGRESS_BATCH = 512
 
 # Open passages are free space, not a single door: expose multiple routing lanes
 # and softly prefer a cable gap without changing the scored job-cost formula.
@@ -76,6 +79,7 @@ class HananRouter:
         plan: Dict[str, Any],
         extra_points: Optional[List[Point2D]] = None,
         cable_wall_clearance_m: float = 0.03,
+        progress_callback: Optional[ProgressCallback] = None,
     ):
         self.plan = plan
         self.scale = float(plan.get("drawing_units_per_metre", 1.0))
@@ -84,6 +88,7 @@ class HananRouter:
             raise ValueError("cable_wall_clearance_m must be finite and nonnegative")
         self.cable_wall_clearance_m = float(cable_wall_clearance_m)
         self.cable_wall_clearance = self.cable_wall_clearance_m * self.scale
+        self.progress_callback = progress_callback
 
         # Obstacles and boundary
         boundary_dict = plan.get("internal_boundary")
@@ -255,6 +260,18 @@ class HananRouter:
         open_set: List[Tuple[float, float, Point2D, Tuple[int, int], int]] = [
             (0.0, 0.0, s_node, (0, 0), counter)
         ]
+        expanded_states = 0
+        reported_states = 0
+        next_report_at = A_STAR_PROGRESS_BATCH
+
+        def report_expansions(*, flush: bool = False) -> None:
+            nonlocal reported_states
+            if self.progress_callback is None:
+                return
+            pending = expanded_states - reported_states
+            if pending >= A_STAR_PROGRESS_BATCH or (flush and pending):
+                self.progress_callback("astar_states_expanded", pending)
+                reported_states = expanded_states
 
         while open_set:
             f, cost, curr, prev_dir, _ = heapq.heappop(open_set)
@@ -271,10 +288,18 @@ class HananRouter:
                     res.insert(0, start)
                 if end != e_node:
                     res.append(end)
+                report_expansions(flush=True)
                 return _simplify_collinear(res) if simplify else res
 
             if best_costs[state] < cost - 1e-6:
                 continue
+
+            if self.progress_callback is not None:
+                expanded_states += 1
+                if expanded_states >= next_report_at:
+                    self.progress_callback("astar_states_expanded", expanded_states - reported_states)
+                    reported_states = expanded_states
+                    next_report_at += A_STAR_PROGRESS_BATCH
 
             cx, cy = curr
             for neighbor, edge_data in adj[curr].items():
@@ -298,6 +323,7 @@ class HananRouter:
                         (new_cost + h, new_cost, neighbor, curr_dir, counter),
                     )
 
+        report_expansions(flush=True)
         return None
 
 
@@ -418,18 +444,93 @@ CABLE_WALL_CLEARANCE_M = 0.2
 CABLE_WALL_CLEARANCE_FALLBACKS_M = (0.15, 0.1, 0.05, 0.03)
 
 
-def solve(plan: Dict[str, Any], *, cable_wall_clearance_m: float = CABLE_WALL_CLEARANCE_M) -> Dict[str, Any]:
+def solve(
+    plan: Dict[str, Any],
+    *,
+    cable_wall_clearance_m: float = CABLE_WALL_CLEARANCE_M,
+    progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
+) -> Dict[str, Any]:
     """Solve with the requested cable-wall clearance, relaxing it only if infeasible."""
+    if progress_callback is not None:
+        observer = progress_callback
+        batch_sizes = {
+            "partition_patterns_examined": 2048,
+            "connected_partitions_found": 8,
+            "candidate_combinations_evaluated": 8,
+            "ring_route_attempts": 8,
+            "astar_states_expanded": 2048,
+        }
+        pending: Dict[str, int] = {}
+        active_progress_stage: str | None = None
+
+        def flush_progress(stage: str | None = None) -> None:
+            if not pending:
+                return
+            target_stage = stage or active_progress_stage or "search"
+            values = dict(pending)
+            pending.clear()
+            try:
+                observer(target_stage, values)
+            except Exception:
+                return
+
+        def safe_progress(stage: str, counters: Dict[str, int]) -> None:
+            nonlocal active_progress_stage
+            if active_progress_stage is not None and stage != active_progress_stage:
+                flush_progress(active_progress_stage)
+            active_progress_stage = stage
+            gauges = {}
+            should_flush = False
+            for name, value in counters.items():
+                if name not in batch_sizes:
+                    gauges[name] = value
+                    continue
+                pending[name] = pending.get(name, 0) + value
+                if pending[name] >= batch_sizes[name]:
+                    should_flush = True
+            if gauges:
+                try:
+                    observer(stage, gauges)
+                except Exception:
+                    pass
+            if should_flush:
+                flush_progress(stage)
+
+        def flush_final_progress() -> None:
+            try:
+                flush_progress()
+            except Exception:
+                pass
+
+        progress_callback = safe_progress
+    else:
+        flush_final_progress = lambda: None
     ladder = [cable_wall_clearance_m] + [c for c in CABLE_WALL_CLEARANCE_FALLBACKS_M if c < cable_wall_clearance_m]
     solution: Dict[str, Any] = {}
-    for clearance in ladder:
-        solution = _solve_with_clearance(plan, cable_wall_clearance_m=clearance)
-        if solution.get("status") != "infeasible":
-            break
+    try:
+        for attempt, clearance in enumerate(ladder, start=1):
+            if progress_callback is None:
+                solution = _solve_with_clearance(plan, cable_wall_clearance_m=clearance)
+            else:
+                solution = _solve_with_clearance(
+                    plan, cable_wall_clearance_m=clearance,
+                    progress_callback=progress_callback,
+                    clearance_attempt=attempt,
+                )
+            if solution.get("status") != "infeasible":
+                break
+    finally:
+        flush_final_progress()
     return solution
 
 
-def _solve_with_clearance(plan: Dict[str, Any], *, cable_wall_clearance_m: float) -> Dict[str, Any]:
+def _solve_with_clearance(
+    plan: Dict[str, Any],
+    *,
+    cable_wall_clearance_m: float,
+    progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
+    clearance_attempt: int = 1,
+) -> Dict[str, Any]:
     """
     Main entry point for capacity-constrained rectilinear closed-ring optimization.
     Guarantees:
@@ -443,6 +544,12 @@ def _solve_with_clearance(plan: Dict[str, Any], *, cable_wall_clearance_m: float
     lower_bound = hub_count_lower_bound(plan)
     rooms = sorted([r for r in plan.get("rooms", []) if r.get("eligible", False)], key=lambda x: x["id"])
     nodes = {n["room_id"]: n for n in plan.get("nodes", [])}
+    preparation_stage = "prepare_geometry" if clearance_attempt == 1 else "search"
+    if progress_callback is not None:
+        progress_callback(preparation_stage, {
+            "eligible_rooms": len(rooms),
+            "clearance_attempt": clearance_attempt,
+        })
     
     if not rooms or not nodes:
         return {
@@ -466,6 +573,8 @@ def _solve_with_clearance(plan: Dict[str, Any], *, cable_wall_clearance_m: float
 
     # Candidate hubs
     candidates = find_legal_hub_candidates(plan)
+    if progress_callback is not None:
+        progress_callback(preparation_stage, {"legal_hub_locations": len(candidates)})
     if not candidates:
         return {
             "plan_id": plan_id,
@@ -482,14 +591,30 @@ def _solve_with_clearance(plan: Dict[str, Any], *, cable_wall_clearance_m: float
         (float(n["point"]["x"]), float(n["point"]["y"])) for n in plan.get("nodes", [])
     ]
     router = HananRouter(
-        plan, extra_points=all_points, cable_wall_clearance_m=cable_wall_clearance_m
+        plan, extra_points=all_points, cable_wall_clearance_m=cable_wall_clearance_m,
+        progress_callback=(
+            (lambda name, value: progress_callback("search", {name: value}))
+            if progress_callback is not None else None
+        ),
     )
+    if progress_callback is not None:
+        progress_callback("search", {
+            "routing_grid_vertices": router.graph.number_of_nodes(),
+            "routing_grid_edges": router.graph.number_of_edges(),
+        })
 
     # Try hub counts starting from lower_bound
     for hub_count in range(lower_bound, len(rooms) + 1):
-        sol = _solve_fixed_hub_count(
-            plan, rooms, nodes, candidates, portal_graph, router, hub_count, max_nodes, max_area
-        )
+        if progress_callback is None:
+            sol = _solve_fixed_hub_count(
+                plan, rooms, nodes, candidates, portal_graph, router, hub_count, max_nodes, max_area
+            )
+        else:
+            progress_callback("search", {"current_hub_count": hub_count, "hub_count_attempts": 1})
+            sol = _solve_fixed_hub_count(
+                plan, rooms, nodes, candidates, portal_graph, router, hub_count, max_nodes, max_area,
+                progress_callback=progress_callback,
+            )
         if sol is not None:
             sol["status"] = "feasible" if hub_count == lower_bound else "best_known"
             sol["lower_bound_hubs"] = lower_bound
@@ -516,12 +641,27 @@ def _solve_fixed_hub_count(
     hub_count: int,
     max_nodes: int,
     max_area: float,
+    progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Compare feasible partitions by full route cost, then assigned-area gap."""
     room_by_id = {r["id"]: r for r in rooms}
     scale = float(plan.get("drawing_units_per_metre", 1.0))
     best_solution: Optional[Dict[str, Any]] = None
     best_rank = (float("inf"), float("inf"))
+    pending_search_counts: Dict[str, int] = {}
+    pending_search_events = 0
+
+    def report_search_counts(counts: Dict[str, int], *, flush: bool = False) -> None:
+        nonlocal pending_search_events
+        if progress_callback is None:
+            return
+        for name, value in counts.items():
+            pending_search_counts[name] = pending_search_counts.get(name, 0) + value
+        pending_search_events += 1
+        if pending_search_events >= 8 or flush:
+            progress_callback("search", dict(pending_search_counts))
+            pending_search_counts.clear()
+            pending_search_events = 0
 
     # Single hub case optimization
     if hub_count == 1:
@@ -540,6 +680,7 @@ def _solve_fixed_hub_count(
         )
 
         for cand in ranked_candidates:
+            report_search_counts({"candidate_combinations_evaluated": 1, "ring_route_attempts": 1})
             hub_dict = {
                 "id": "hub:1",
                 "point": {"x": cand["point"][0], "y": cand["point"][1]},
@@ -570,6 +711,7 @@ def _solve_fixed_hub_count(
                     best_rank, best_solution = rank, sol_dict
         if best_solution is not None:
             best_solution["metrics"] = _compute_advisory_metrics(plan, best_solution, scale)
+        report_search_counts({}, flush=True)
         return best_solution
 
     # Multi-hub partition search: enumerate connected partitions, and for each
@@ -580,7 +722,13 @@ def _solve_fixed_hub_count(
     room_ids = [r["id"] for r in rooms]
     cand_by_room = {c["room_id"]: c for c in candidates}
 
-    for hub_rooms_tuple in _partition_connected(room_ids, portal_graph, hub_count, max_nodes, max_area, room_by_id):
+    for hub_rooms_tuple in _partition_connected(
+        room_ids, portal_graph, hub_count, max_nodes, max_area, room_by_id,
+        progress_callback=(
+            (lambda name, value: progress_callback("search", {name: value}))
+            if progress_callback is not None else None
+        ),
+    ):
         # Rank and cap candidates for every territory in this partition.
         territory_candidate_lists: List[List[Dict[str, Any]]] = []
         partition_feasible = True
@@ -601,6 +749,7 @@ def _solve_fixed_hub_count(
 
         # Joint search: every combination of one hub candidate per territory.
         for candidate_combo in itertools.product(*territory_candidate_lists):
+            report_search_counts({"candidate_combinations_evaluated": 1})
             combo_hubs: List[Dict[str, Any]] = []
             combo_rings: List[Dict[str, Any]] = []
             combo_assignments: List[Dict[str, Any]] = []
@@ -615,6 +764,7 @@ def _solve_fixed_hub_count(
                 }
                 combo_hubs.append(hub_dict)
 
+                report_search_counts({"ring_route_attempts": 1})
                 ring = _route_territory_ring(hub_dict, territory_rooms, nodes, router, scale)
                 if ring is None:
                     feasible = False
@@ -647,6 +797,7 @@ def _solve_fixed_hub_count(
 
     if best_solution is not None:
         best_solution["metrics"] = _compute_advisory_metrics(plan, best_solution, scale)
+    report_search_counts({}, flush=True)
     return best_solution
 
 
@@ -677,6 +828,7 @@ def _partition_connected(
     max_nodes: int,
     max_area: float,
     room_by_id: Dict[str, Any],
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> List[Tuple[List[str], ...]]:
     """Generate all valid connected partitions of rooms into k territories."""
     n = len(room_ids)
@@ -687,8 +839,13 @@ def _partition_connected(
         return []
 
     valid_partitions = []
+    assignment_patterns_examined = 0
     # Exhaustive assignment search for small instances
     for owners in itertools.product(range(k), repeat=n):
+        if progress_callback is not None:
+            assignment_patterns_examined += 1
+            if assignment_patterns_examined % PARTITION_PROGRESS_BATCH == 0:
+                progress_callback("partition_patterns_examined", PARTITION_PROGRESS_BATCH)
         # Must use all owners
         if len(set(owners)) != k:
             continue
@@ -714,8 +871,14 @@ def _partition_connected(
             sorted_groups = tuple(sorted(groups, key=lambda g: g[0]))
             if sorted_groups not in valid_partitions:
                 valid_partitions.append(sorted_groups)
+                if progress_callback is not None:
+                    progress_callback("connected_partitions_found", 1)
                 if len(valid_partitions) > 50:  # Cap candidate partitions
                     break
+    if progress_callback is not None:
+        remaining = assignment_patterns_examined % PARTITION_PROGRESS_BATCH
+        if remaining:
+            progress_callback("partition_patterns_examined", remaining)
     return valid_partitions
 
 

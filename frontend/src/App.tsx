@@ -24,10 +24,86 @@ type RunResult = {
   submission: unknown | null; fallback_nodes: number
 }
 type ApiError = { code: string; message: string; diagnostics?: Diagnostic[] }
+type RunStage = { id: string; label: string; status: 'upcoming' | 'active' | 'completed' | 'skipped' | 'failed' }
+type ProgressState = {
+  stages: RunStage[]; active_stage: string | null; failed_stage: string | null;
+  counters: Record<string, number>; elapsed_s: number
+}
+type ProgressEvent = { type: 'progress'; active_stage: string | null; stages: RunStage[]; counters: Record<string, number>; elapsed_s: number; failed_stage?: string | null }
+type TerminalEvent = { type: 'complete'; state: ProgressState; result: RunResult } | { type: 'error'; state: ProgressState; stage: string; error: ApiError }
 
 const presets = [14433, 13033, 14926]
 const ViewerPanel = lazy(() => import('./ViewerPanel'))
 const number = (value: number, digits = 2) => value.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits })
+const stageCounterKeys: Record<string, string[]> = {
+  prepare_geometry: ['eligible_rooms', 'legal_hub_locations', 'routing_grid_vertices', 'routing_grid_edges', 'clearance_attempt'],
+  search: ['current_hub_count', 'hub_count_attempts', 'partition_patterns_examined', 'connected_partitions_found', 'candidate_combinations_evaluated', 'ring_route_attempts', 'astar_states_expanded', 'clearance_attempt', 'legal_hub_locations'],
+}
+const counterLabels: Record<string, string> = {
+  eligible_rooms: 'Eligible rooms', legal_hub_locations: 'Legal hub locations found',
+  routing_grid_vertices: 'Routing grid vertices', routing_grid_edges: 'Routing grid edges',
+  clearance_attempt: 'Clearance attempt', current_hub_count: 'Current hub count',
+  hub_count_attempts: 'Hub counts attempted', partition_patterns_examined: 'Room assignment patterns examined',
+  connected_partitions_found: 'Connected partitions found', candidate_combinations_evaluated: 'Hub combinations evaluated',
+  ring_route_attempts: 'Ring routes attempted', astar_states_expanded: 'A* states expanded',
+}
+
+function initialProgress(): ProgressState {
+  return {
+    stages: [
+      { id: 'load_plan', label: 'Load plan', status: 'active' },
+      { id: 'normalize_plan', label: 'Normalize local plan', status: 'upcoming' },
+      { id: 'prepare_geometry', label: 'Prepare routing geometry', status: 'upcoming' },
+      { id: 'search', label: 'Search connected territories and closed rings', status: 'upcoming' },
+      { id: 'validate', label: 'Independently check solution', status: 'upcoming' },
+      { id: 'render_export', label: 'Render and export results', status: 'upcoming' },
+    ],
+    active_stage: 'load_plan', failed_stage: null, counters: {}, elapsed_s: 0,
+  }
+}
+
+async function streamRun(request: { source: string; plan_id: number }, onProgress: (state: ProgressState) => void): Promise<RunResult> {
+  let response: Response
+  try {
+    response = await fetch('/api/runs/stream', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request),
+    })
+  } catch (failure) { throw asApiError(failure) }
+  if (!response.ok) {
+    let body: { detail?: unknown }
+    try { body = await response.json() }
+    catch { throw { code: 'invalid_response', message: `Planner returned HTTP ${response.status} without JSON.` } as ApiError }
+    throw asApiError(body.detail)
+  }
+  if (!response.body) throw { code: 'stream_unavailable', message: 'Planner did not open the progress stream.' } as ApiError
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let terminal: TerminalEvent | null = null
+  const consumeLine = (line: string) => {
+    if (!line.trim()) return
+    const event = JSON.parse(line) as ProgressEvent | TerminalEvent
+    if (event.type === 'progress') onProgress({ ...event, failed_stage: event.failed_stage ?? null })
+    else {
+      terminal = event
+      onProgress(event.state)
+    }
+  }
+  while (true) {
+    const { value, done } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) consumeLine(line)
+    if (done) break
+  }
+  if (buffer.trim()) consumeLine(buffer)
+  const terminalEvent = terminal as TerminalEvent | null
+  if (!terminalEvent) throw { code: 'stream_incomplete', message: 'Planner closed the progress stream before returning a result.' } as ApiError
+  if (terminalEvent.type === 'error') throw asApiError(terminalEvent.error)
+  return terminalEvent.result
+}
 
 function asApiError(value: unknown): ApiError {
   if (typeof value === 'object' && value !== null && 'code' in value && 'message' in value &&
@@ -65,6 +141,28 @@ function Metric({ label, value, note }: { label: string; value: string; note?: s
   return <div className="metric"><span className="metric-label">{label}</span><strong>{value}</strong>{note && <small>{note}</small>}</div>
 }
 
+function RunProgressView({ progress, elapsed, failed }: { progress: ProgressState; elapsed: number; failed: boolean }) {
+  const activeStage = progress.stages.find(stage => stage.id === (progress.failed_stage ?? progress.active_stage))
+  const visibleCounters = (stageCounterKeys[progress.failed_stage ?? progress.active_stage ?? ''] ?? [])
+    .filter(key => progress.counters[key] !== undefined)
+  return <div className="run-progress-view">
+    <div className="run-progress-heading">
+      <strong>{failed ? `Stopped during ${activeStage?.label ?? 'the run'}` : activeStage?.label ?? 'Preparing run…'}</strong>
+      <small>{number(elapsed, 1)} seconds elapsed</small>
+    </div>
+    <span className="sr-only" aria-live="polite">{activeStage?.label ?? ''}</span>
+    <ol className="run-stage-list" aria-label="Plan run stages">
+      {progress.stages.map(stage => <li className={`run-stage ${stage.status}`} key={stage.id} aria-current={stage.status === 'active' ? 'step' : undefined}>
+        <span className="run-stage-marker" aria-hidden="true">{stage.status === 'completed' ? '✓' : stage.status === 'skipped' ? '–' : stage.status === 'failed' ? '!' : stage.status === 'active' ? '◌' : '·'}</span>
+        <span>{stage.label}{stage.status === 'skipped' ? ' · skipped' : ''}</span>
+      </li>)}
+    </ol>
+    {visibleCounters.length > 0 && <div className="run-counter-grid" aria-label="Live solver counters">
+      {visibleCounters.map(key => <div className="run-counter" key={key}><small>{counterLabels[key]}</small><strong>{number(progress.counters[key], 0)}</strong></div>)}
+    </div>}
+  </div>
+}
+
 export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [selected, setSelected] = useState<number>(14433)
@@ -75,6 +173,8 @@ export default function App() {
   const [elapsed, setElapsed] = useState(0)
   const [started, setStarted] = useState(0)
   const [jsonTab, setJsonTab] = useState<'submission' | 'development'>('submission')
+  const [reportBusy, setReportBusy] = useState(false)
+  const [runProgress, setRunProgress] = useState<ProgressState | null>(null)
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -102,20 +202,19 @@ export default function App() {
     setSelected(id)
     setResult(null)
     setError(null)
+    setRunProgress(null)
   }
 
   async function run() {
     setBusy(true)
     setResult(null)
     setError(null)
+    setRunProgress(initialProgress())
     const start = Date.now()
     setStarted(start)
     setElapsed(0)
     try {
-      const data = await api<RunResult>('/api/runs', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: 'local', plan_id: selected }),
-      })
+      const data = await streamRun({ source: 'local', plan_id: selected }, setRunProgress)
       setResult(data)
       setJsonTab('submission')
     } catch (failure) {
@@ -126,8 +225,37 @@ export default function App() {
     }
   }
 
+  async function downloadPdfReport() {
+    if (!result || reportBusy) return
+    setReportBusy(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/reports/pdf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result }),
+      })
+      if (!response.ok) {
+        let detail: unknown
+        try { detail = (await response.json()).detail } catch { /* use the HTTP status below */ }
+        throw asApiError(detail ?? new Error(`Report generation failed (HTTP ${response.status}).`))
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `cable-ring-plan-${result.plan_id}-report.pdf`
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (failure) {
+      setError(asApiError(failure))
+    } finally {
+      setReportBusy(false)
+    }
+  }
+
   const metrics = result?.validation.recomputed_metrics
-  const previewUrl = `/api/plans/${selected}/preview?source=local`
+  const previewSource = presets.includes(selected) ? 'bundled' : 'local'
+  const previewUrl = `/api/plans/${selected}/preview?source=${previewSource}`
   const candidates = (catalog?.results ?? []).filter(item => query.length > 0 || !presets.includes(item.id))
 
   return <div className="page-shell">
@@ -148,7 +276,7 @@ export default function App() {
           <div className="field-note">Runs use the trusted ResPlan archive on this localhost server. Every plan is normalized and solved when selected.</div>
           <div className="section-label"><span>FEATURED PLANS</span><span>03</span></div>
           <div className="preset-list">{presets.map((id, index) => <button type="button" className={`preset ${selected === id ? 'selected' : ''}`} onClick={() => choose(id)} disabled={busy || !catalog?.presets.find(p => p.id === id)?.available} key={id} aria-pressed={selected === id}>
-            <span className="preset-thumb"><img src={`/api/plans/${id}/preview?source=local`} alt={`Floor plan ${id} thumbnail`} loading="lazy" /></span>
+            <span className="preset-thumb"><img src={`/api/plans/${id}/preview?source=bundled`} alt={`Floor plan ${id} thumbnail`} loading="lazy" /></span>
             <span className="preset-copy"><small>FEATURED 0{index + 1}</small><strong>{id}</strong><span>{catalog?.presets.find(p => p.id === id)?.split ?? 'Dataset'}</span></span>
             <span className="preset-arrow">↗</span>
           </button>)}</div>
@@ -165,7 +293,7 @@ export default function App() {
             {error && <div className="alert" role="alert"><strong>{error.code.replaceAll('_', ' ')}</strong><p>{error.message}</p>{elapsed > 0 && <p>Elapsed before failure: {number(elapsed, 1)} s</p>}{error.diagnostics?.map((item, index) => <p key={index}>{item.code}: {item.message}</p>)}</div>}
             <div className="image-grid">
               <div className="image-card"><div className="image-title"><span className="image-number">A</span><div><strong>Input floor plan</strong><small>ROOMS · NODES · PORTALS</small></div></div><div className="image-frame"><img key={selected} src={result?.input_image ?? previewUrl} alt={`Input floor plan ${selected}`} /></div></div>
-              <div className="image-card"><div className="image-title"><span className="image-number coral">B</span><div><strong>Checked output</strong><small>HUBS · TERRITORIES · RINGS</small></div></div><div className={`image-frame ${!result?.output_image ? 'empty-frame' : ''}`}>{result?.output_image ? <img src={result.output_image} alt={`Checked solution for plan ${selected}`} /> : <div><span>◇</span><strong>{busy ? 'Solving floor plan…' : 'Output awaits a run'}</strong><small>{busy ? `${number(elapsed, 1)} seconds elapsed` : 'Select a plan and press Run plan'}</small></div>}</div></div>
+              <div className="image-card"><div className="image-title"><span className="image-number coral">B</span><div><strong>Checked output</strong><small>HUBS · TERRITORIES · RINGS</small></div></div><div className={`image-frame ${!result?.output_image ? 'empty-frame' : ''}`}>{result?.output_image ? <img src={result.output_image} alt={`Checked solution for plan ${selected}`} /> : busy && runProgress ? <RunProgressView progress={runProgress} elapsed={elapsed} failed={false} /> : error && runProgress ? <RunProgressView progress={runProgress} elapsed={elapsed} failed /> : <div><span>◇</span><strong>Output awaits a run</strong><small>Select a plan and press Run plan</small></div>}</div></div>
             </div>
             <div className="comparison-foot"><span><i className="legend-node" /> FIXED NODE</span><span><i className="legend-hub" /> HUB</span><span><i className="legend-route" /> CABLE RING</span><span className="comparison-status">{result ? (result.validation.is_valid ? '✓ INDEPENDENT CHECK PASSED' : '✕ CHECK FAILED') : 'READY TO RUN'}</span></div>
           </section>
@@ -175,6 +303,7 @@ export default function App() {
           {result && <>
             <section className="results panel"><div className="section-top"><div><span className="kicker">04 / VERIFIED RESULT</span><h2>Numbers behind the plan</h2></div><span className={`status-pill ${result.validation.is_valid ? 'good' : 'bad'}`}>{result.status.replaceAll('_', ' ').toUpperCase()}</span></div>
               <div className="result-context">{result.status === 'best_known' ? 'Best solution found within the solver search; global optimality is not proven.' : result.validation.is_valid ? 'Independent validation passed.' : 'Independent validation found violations.'}{result.fallback_nodes > 0 && ` ${result.fallback_nodes} fixed nodes are development fallbacks.`}</div>
+              <button className="download-button report-download" type="button" onClick={downloadPdfReport} disabled={reportBusy}>{reportBusy ? 'PREPARING PDF…' : 'DOWNLOAD COMPLETE PDF REPORT ↓'}</button>
               {metrics && <><div className="metrics-grid"><Metric label="HUB COUNT" value={String(metrics.hub_count)} note={`Lower bound ${result.lower_bound_hubs ?? '—'}`} /><Metric label="ROUTE COST · J" value={number(metrics.route_cost, 3)} note="Checked objective" /><Metric label="TOTAL LENGTH · L" value={`${number(metrics.length_m, 2)} m`} /><Metric label="AREA GAP" value={`${number(metrics.area_gap_m2, 2)} m²`} /></div>
                 <div className="formula"><div><span className="kicker">THE J CALCULATION</span><strong>J = L + 5X + O + 0.5B</strong></div><div className="formula-values"><span>{number(metrics.length_m, 3)}<small>L · METRES</small></span><b>+</b><span>{metrics.crossings * 5}<small>5 × {metrics.crossings} CROSSINGS</small></span><b>+</b><span>{number(metrics.overlap_m, 3)}<small>O · METRES</small></span><b>+</b><span>{number(metrics.bends * .5, 2)}<small>0.5 × {metrics.bends} BENDS</small></span><b>=</b><span className="formula-total">{number(metrics.route_cost, 3)}<small>J · TOTAL</small></span></div></div></>}
               {(result.diagnostics.length > 0 || result.validation.violations.length > 0 || result.validation.warnings.length > 0) && <details className="diagnostics"><summary>Diagnostics · {result.diagnostics.length + result.validation.violations.length + result.validation.warnings.length}</summary>{[...result.diagnostics, ...result.validation.violations, ...result.validation.warnings].map((item, index) => <p key={index}><strong>{item.code}</strong> {item.message}</p>)}</details>}

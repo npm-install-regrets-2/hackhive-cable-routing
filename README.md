@@ -14,16 +14,16 @@ From this repository root, install and start the API and frontend in separate te
 uv venv .venv
 uv pip install --python .venv/Scripts/python.exe -e .
 npm --prefix frontend ci
-.venv/Scripts/python.exe -m uvicorn cable_planner.web.app:app --reload --port 8000
+.venv/Scripts/python.exe -m uvicorn cable_planner.web.app:app --reload --port 8001
 ```
 
 ```powershell
 npm --prefix frontend run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies `/api` to FastAPI. The API also serves the production frontend at `http://localhost:8000` after `npm --prefix frontend run build`.
+Open `http://localhost:5173`. Vite proxies `/api` to FastAPI on port 8001 by default; set `CABLE_RING_API_PROXY` to use another API address. The API also serves the production frontend at `http://localhost:8001` after `npm --prefix frontend run build`.
 
-Local mode reads `archive/ResPlan.pkl` and `archive/split.json` in this checkout or its parent directory. Set `RESPLAN_ARCHIVE_PATH` and `RESPLAN_SPLIT_PATH` to other **trusted server-side files** if needed; the browser cannot upload a pickle or select arbitrary server paths. The first local lookup loads the archive into a process cache, so its load time may be much longer than later lookups.
+Local mode reads `archive/ResPlan.pkl` and `archive/split.json` in this checkout or its parent directory. Set `RESPLAN_ARCHIVE_PATH` and `RESPLAN_SPLIT_PATH` to other **trusted server-side files** if needed; the browser cannot upload a pickle or select arbitrary server paths. Featured plan thumbnails and the initial preview use the bundled plans so opening the page does not load the large local archive. The first lookup of another local plan loads the archive into a process cache; concurrent cold lookups share one load.
 
 For a single-container build:
 
@@ -36,7 +36,7 @@ Open `http://localhost:8000`. The read-only archive mount is required for the lo
 
 The runtime panel reports server load, normalization, solve, validation, and render/export times for each run, plus total server time. Thumbnail generation, browser transfer, and 3D playback are outside the server timer. The viewer's estimated duration is its checked loop length divided by the selected simulated speed; it is not a solver prediction or a physical cable velocity. The objective panel uses the independent checker's `H`, `L`, `X`, `O`, `B`, `J`, and area gap; `best_known` does not claim global optimality.
 
-Two JSON downloads are available after a run. **Development Plan + Solution** follows `shared/schema/common.schema.json` in drawing units. **Slide 8 submission · provisional** follows the slide example in metres with a lower-left origin and is offered only when independent validation passes. The organizers have not published a complete machine-readable submission schema, so this export must be reviewed against any newer organizer contract before submission.
+After a run, download a complete PDF report with the input and checked-output images, checked metrics, diagnostics, timings, development JSON, provisional submission JSON, architecture data, and run metadata. The two standalone JSON downloads remain available: **Development Plan + Solution** follows `shared/schema/common.schema.json` in drawing units; **Slide 8 submission · provisional** follows the slide example in metres with a lower-left origin and is offered only when independent validation passes. The organizers have not published a complete machine-readable submission schema, so this export must be reviewed against any newer organizer contract before submission.
 
 The earlier Streamlit interface remains in `cable_planner/demo/app.py` for repository history; the React demo above is the local dataset workflow.
 

@@ -40,6 +40,29 @@ def test_grid_router_fixture_valid(plan):
     )
 
 
+def test_solver_progress_callback_reports_real_search_counts_without_changing_solution(plan):
+    updates = []
+    solution = solve(plan, progress_callback=lambda stage, counters: updates.append((stage, counters)))
+    baseline = solve(plan)
+
+    assert solution == baseline
+    stages = [stage for stage, _ in updates]
+    assert stages[0] == "prepare_geometry"
+    assert "search" in stages
+    counters = {}
+    for _stage, values in updates:
+        for key, value in values.items():
+            if key in {"hub_count_attempts", "partition_patterns_examined", "connected_partitions_found",
+                       "candidate_combinations_evaluated", "ring_route_attempts", "astar_states_expanded"}:
+                counters[key] = counters.get(key, 0) + value
+            else:
+                counters[key] = value
+    assert counters["eligible_rooms"] == 3
+    assert counters["legal_hub_locations"] > 0
+    assert counters["ring_route_attempts"] > 0
+    assert counters["astar_states_expanded"] > 0
+
+
 def test_grid_router_with_obstacle(plan):
     # Add a wall obstacle to the plan
     import copy

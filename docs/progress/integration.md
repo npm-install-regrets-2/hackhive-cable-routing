@@ -10,6 +10,17 @@
 - Next: tune route separation through shared open passages and keep the cost/runtime tradeoff visible.
 - Commit/PR: pending
 
+## 2026-10-17 — Avoid loading the local archive on initial page render
+
+- Status: implemented
+- Changed: `frontend/src/App.tsx`, `cable_planner/web/app.py`, `tests/web/test_app.py`, `README.md`
+- Why: the initial view requested local previews for all featured plans, causing multiple first-use reads of a 300 MB pickle; server logs showed `MemoryError` in `pickle.load`.
+- Changed: featured thumbnails and featured-plan selection now use bundled preview data. Local archive cache misses are serialized so concurrent local lookups share one cold unpickle.
+- Checked: frontend production build passed; concurrent cold archive lookup test passed; cold bundled preview returned HTTP 200 in 0.87 s; `git diff --check` passed.
+- Open: a cold local lookup still has to read the archive once when a non-bundled plan is selected.
+- Next: monitor the first local-plan lookup on a memory-constrained machine.
+- Commit/PR: pending
+
 ## 2026-10-16 — Improve floor overlay clarity
 
 - Status: done
@@ -273,4 +284,30 @@
 - Checked: normalization suite passed (9 tests), frontend production build passed, and `git diff --check` passed.
 - Open: none
 - Next: push the removal to `main`.
+- Commit/PR: pending
+
+## 2026-10-17 — Add downloadable completed-run PDF report
+
+- Status: done
+- Changed: `pyproject.toml`, `uv.lock`, `cable_planner/web/app.py`, `cable_planner/web/report.py`, `frontend/src/App.tsx`, `frontend/src/style.css`, `README.md`
+- Why: keep the selected run's source and checked output images, checked metrics, diagnostics, timing, development JSON, submission JSON, architecture, and run metadata together in a portable report.
+- Changed: added a PDF report endpoint and a download button in the verified-result panel. ReportLab is a declared project dependency and is imported only when a report is requested so missing runtime installation does not prevent the rest of the UI/API from starting.
+- Checked: added and locked ReportLab 4.5.1. Generated a representative 38-page PDF from a checked plan result, rendered it to PNG, visually inspected the cover, input image, and JSON appendix, and confirmed all report sections are present. The frontend TypeScript/Vite production build passed.
+- Open: none.
+- Next: none.
+- Commit/PR: pending
+
+## 2026-10-17 — Stream truthful solver progress
+
+- Status: implemented
+- Changed: `cable_planner/web/app.py`, `cable_planner/web/run_progress.py`, `cable_planner/solver/grid_router.py`, `frontend/src/App.tsx`, `frontend/src/style.css`, `frontend/vite.config.ts`, `tests/web/test_app.py`, `tests/solver/test_grid_router.py`
+- Why: make solver activity visible during longer runs without inventing a percent or finish time, and retain the established synchronous API response.
+- Changed: added `POST /api/runs/stream` with newline-delimited progress, result, and structured error events. The UI shows an ordered six-stage timeline in the checked-output placeholder, elapsed seconds, and observed solver counts. Bundled plans mark local normalization skipped. Added optional solver callbacks and batched counter emission; no search passes were added.
+- Checked: solver and web suites passed (28 tests); after the final solver callback batching adjustment, focused solver/web tests passed (10 tests). Frontend production build and `compileall` passed. The synchronous and streamed result test compares their completed output; streamed tests cover stage states, counters, success, and failure.
+- Checked: repeated 13,033-plan runs showed 1.44% median overhead (baseline runs varied by about 1.7%). A 14,433-plan run measured 1.01% faster with instrumentation, within expected run-to-run variation. The progress path adds no solver passes.
+- Checked: manually streamed a 13,033 short run (8.38 s total), a 14,433 longer run (28.79 s), and an unavailable-plan failure. Stage order and bundled normalization skip were correct; live A* counts increased during search; the failure named `load_plan`. The updated frontend is open at `http://localhost:5173/`.
+- Fixed: all requests from the existing `5173` page were reaching an older API on `8000`, which did not expose the stream route. The local dev proxy and README now default to the updated API on `8001`, with `CABLE_RING_API_PROXY` as an override.
+- Checked: `POST http://127.0.0.1:5173/api/runs/stream` returned HTTP 200 and a complete result with live counters through validation and export.
+- Open: none.
+- Next: none.
 - Commit/PR: pending

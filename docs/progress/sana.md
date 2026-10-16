@@ -2,6 +2,16 @@
 
 Append entries using the format in `docs/README.md`. Owns independent validation, metrics, visualization, and the end-to-end demo.
 
+## 2026-10-17 — Keep comparison image frames aligned with their cards
+
+- Status: done
+- Changed: `frontend/src/style.css`
+- Why: the two image cards share a grid row whose height follows the taller floor-plan image, but each inner frame previously stopped at its own content height and exposed the card background as a mismatched band
+- Checked: `npm run build` in `frontend/` passed; Vite reported the existing large-chunk advisory
+- Open: none
+- Next: visually inspect the comparison at desktop and narrow widths when the UI is running
+- Commit/PR: pending
+
 ## 2026-10-15 — Initial independent validator, checker metrics, visual renderer, and canonical fixtures
 
 - Status: done
