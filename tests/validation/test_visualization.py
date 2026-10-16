@@ -7,10 +7,48 @@ import matplotlib.pyplot as plt
 
 from cable_planner.validation.checker import IndependentValidator
 from cable_planner.visualization.renderer import (
-    _add_floorplan_legend, _shared_cable_spans, render_solution_overlay,
+    _add_floorplan_legend, _add_non_overlapping_plan_labels, _shared_cable_spans,
+    render_input_plan, render_solution_overlay,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "shared" / "fixtures"
+EXAMPLE_PLANS_DIR = Path(__file__).resolve().parents[2] / "examples" / "inputs"
+
+
+def test_plan_13033_preview_labels_do_not_overlap():
+    plan = json.loads((EXAMPLE_PLANS_DIR / "plan_13033.json").read_text(encoding="utf-8"))
+    fig = render_input_plan(plan, dpi=110)
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        label_boxes = [
+            text.get_window_extent(renderer)
+            for axis in fig.axes
+            for text in axis.texts
+            if text.get_visible()
+        ]
+        assert all(
+            not first.overlaps(second)
+            for index, first in enumerate(label_boxes)
+            for second in label_boxes[index + 1:]
+        )
+    finally:
+        plt.close(fig)
+
+
+def test_dense_plan_labels_are_spaced_instead_of_overlapping():
+    fig, ax = plt.subplots(figsize=(12, 10), dpi=110)
+    labels = [(f"room:bedroom:{index:03}", (0, 0), "room") for index in range(12)]
+    _add_non_overlapping_plan_labels(ax, labels)
+    renderer = fig.canvas.get_renderer()
+    boxes = [text.get_window_extent(renderer) for text in ax.texts if text.get_visible()]
+    assert len(boxes) == len(labels)
+    assert all(
+        not first.overlaps(second)
+        for index, first in enumerate(boxes)
+        for second in boxes[index + 1:]
+    )
+    plt.close(fig)
 
 
 def test_visual_rendering(tmp_path):

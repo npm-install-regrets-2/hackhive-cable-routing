@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
-from shapely.geometry import MultiPolygon, Polygon, box
+from shapely.geometry import MultiPolygon, Point, Polygon, box
 
 from cable_planner.ingestion import Rules, normalize_plan
 from cable_planner.geometry import portal_graph
@@ -76,6 +76,51 @@ def test_fixed_node_clearance_and_excluded_room():
     assert good.ok
     assert good.plan["nodes"][0]["source"] == "organizer"
     assert len(good.plan["nodes"]) == 2
+
+
+def test_fallback_node_moves_away_from_wall_when_room_has_clear_space():
+    raw = fixture()
+    raw["wall"] = box(4.5, 4.5, 5.5, 5.5)
+
+    result = normalize_plan(raw)
+
+    assert result.ok, result.diagnostics
+    validate(result.plan)
+    node = next(node for node in result.plan["nodes"] if node["room_id"] == "room:living:000")
+    point = Point(node["point"]["x"], node["point"]["y"])
+    scale = result.plan["drawing_units_per_metre"]
+    clearance = result.plan["rules"]["node_wall_clearance_m"] - result.plan["rules"]["geometry_tolerance"]
+    assert raw["living"].boundary.distance(point) / scale >= clearance
+    assert raw["wall"].distance(point) / scale >= clearance
+
+
+def test_fallback_node_reports_when_no_clear_space_exists():
+    raw = fixture()
+    raw["wall"] = raw["living"]
+
+    result = normalize_plan(raw)
+
+    assert result.plan is None
+    assert any(d["code"] == "invalid_fixed_node"
+               and d["entity_ids"] == ["room:living:000"]
+               and "no fallback point" in d["message"] for d in result.diagnostics)
+
+
+def test_outside_and_narrow_room_fragments_have_measured_diagnostics():
+    raw = fixture()
+    raw["living"] = MultiPolygon([box(-0.8, 0, -0.4, 8), box(5, 1, 5.02, 8)])
+
+    result = normalize_plan(raw)
+
+    assert result.plan is None
+    outside = next(d for d in result.diagnostics if d["code"] == "room_outside_boundary")
+    assert outside["entity_ids"] == ["room:living:000"]
+    assert "m2 outside" in outside["message"]
+    narrow = [d for d in result.diagnostics if d["code"] == "invalid_fixed_node"]
+    assert {tuple(d["entity_ids"]) for d in narrow} == {
+        ("room:living:000",), ("room:living:001",)}
+    assert all("0.5 m wall clearance" in d["message"]
+               and "maximum room-boundary clearance" in d["message"] for d in narrow)
 
 
 def test_wall_blocks_open_passage_and_missing_door_warns():

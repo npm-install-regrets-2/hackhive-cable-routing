@@ -151,6 +151,50 @@ def _room_label_anchor(
     return max(candidates, default=(0.0, center), key=lambda candidate: candidate[0])[1]
 
 
+def _add_non_overlapping_plan_labels(
+    ax: Any,
+    labels: list[Tuple[str, Tuple[float, float], str]],
+) -> None:
+    """Place full room/node IDs in nearby free space, hiding only labels that cannot fit."""
+    if not labels:
+        return
+    ax.figure.canvas.draw()
+    renderer = ax.figure.canvas.get_renderer()
+    placed = []
+    # Put node IDs first so their marker labels stay visible when room labels are dense.
+    for text, point, kind in sorted(labels, key=lambda item: item[2] != "node"):
+        annotation = ax.annotate(
+            text,
+            xy=point,
+            xytext=(0, 0),
+            textcoords="offset points",
+            ha="center",
+            va="center",
+            fontsize=7 if kind == "node" else 6.5,
+            color="#18212b",
+            zorder=8 if kind == "room" else 9,
+            bbox={"boxstyle": "round,pad=0.12", "facecolor": "white", "edgecolor": "none", "alpha": 0.82},
+        )
+        candidates = [(0, 0)]
+        for radius in (9, 15, 22, 30, 39, 49, 60, 72, 84, 98, 112, 128):
+            for step in range(16):
+                angle = step * math.tau / 16
+                candidates.append((radius * math.cos(angle), radius * math.sin(angle)))
+        chosen = None
+        for offset in candidates:
+            annotation.set_position(offset)
+            box = annotation.get_window_extent(renderer).expanded(1.04, 1.18)
+            collisions = sum(box.overlaps(previous) for previous in placed)
+            if collisions == 0:
+                chosen = offset
+                placed.append(box)
+                break
+        if chosen is None:
+            # Dense plans can have more labels than the drawing can fit. Keep the
+            # diagram legible and retain the ID on the marker/room geometry itself.
+            annotation.remove()
+
+
 def render_input_plan(
     plan: Dict[str, Any], figsize: Tuple[int, int] = (12, 10), dpi: int = 200
 ) -> plt.Figure:
@@ -158,6 +202,7 @@ def render_input_plan(
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
     ax.set_aspect("equal")
     open_passages = _open_passage_lines(plan)
+    labels: list[Tuple[str, Tuple[float, float], str]] = []
 
     for room in plan.get("rooms", []):
         exterior = [(p["x"], p["y"]) for p in room["geometry"]["exterior"]]
@@ -168,7 +213,7 @@ def render_input_plan(
         _draw_room_outline(ax, exterior, open_passages, color="#6C757D", linewidth=1.0)
         cx = sum(p[0] for p in exterior) / len(exterior)
         cy = sum(p[1] for p in exterior) / len(exterior)
-        ax.text(cx, cy, room["id"], ha="center", va="center", fontsize=8)
+        labels.append((room["id"], (cx, cy), "room"))
 
     boundary = plan.get("internal_boundary", {})
     exterior = [(p["x"], p["y"]) for p in boundary.get("exterior", [])]
@@ -193,14 +238,14 @@ def render_input_plan(
     for node in plan.get("nodes", []):
         point = node["point"]
         ax.scatter(point["x"], point["y"], s=140, color="#FFB703", edgecolor="#D48B00", zorder=5)
-        ax.text(point["x"] + 1.5, point["y"] - 2.2, node["id"], fontsize=8, zorder=6)
+        labels.append((node["id"], (point["x"], point["y"]), "node"))
 
     _add_floorplan_legend(ax, plan)
-
     ax.set_title(f"Plan: {plan.get('id', 'N/A')} — Normalized Input", fontsize=12, weight="bold", pad=12)
     ax.grid(True, linestyle=":", alpha=0.4)
     ax.relim()
     ax.autoscale_view()
+    _add_non_overlapping_plan_labels(ax, labels)
     return fig
 
 

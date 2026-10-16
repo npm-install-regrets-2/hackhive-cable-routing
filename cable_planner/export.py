@@ -13,8 +13,8 @@ def format_official_submission(
 ) -> Dict[str, Any]:
     """
     Format output matching Slide 8 of the challenge deck:
-    - Coordinates converted to physical metres: (x / scale, y / scale).
-    - Origin lower-left, y up.
+    - Coordinates converted to physical metres after subtracting the internal
+      boundary's lower-left drawing-unit origin; y remains upward.
     - Structure:
         {
           "plan_id": "...",
@@ -43,7 +43,14 @@ def format_official_submission(
           }
         }
     """
-    scale = float(plan.get("drawing_units_per_metre", 1.0))
+    scale = float(plan["drawing_units_per_metre"])
+    boundary = plan["internal_boundary"]["exterior"]
+    origin_x = min(float(vertex["x"]) for vertex in boundary)
+    origin_y = min(float(vertex["y"]) for vertex in boundary)
+
+    def metre_point(value: Dict[str, Any]) -> tuple[float, float]:
+        return ((float(value["x"]) - origin_x) / scale,
+                (float(value["y"]) - origin_y) / scale)
 
     # Map assignments by hub
     hub_assigned_rooms: Dict[str, List[str]] = {}
@@ -68,8 +75,7 @@ def format_official_submission(
 
     for hub in solution.get("hubs", []):
         h_id = hub.get("id")
-        hx_m = round(float(hub["point"]["x"]) / scale, 3)
-        hy_m = round(float(hub["point"]["y"]) / scale, 3)
+        hx_m, hy_m = (round(value, 3) for value in metre_point(hub["point"]))
 
         ring = rings_by_hub.get(h_id, {})
         stop_ids = ring.get("stop_ids", [])
@@ -88,7 +94,8 @@ def format_official_submission(
             for i in range(len(poly_units)):
                 px = float(poly_units[i]["x"])
                 py = float(poly_units[i]["y"])
-                polyline_m.append([round(px / scale, 3), round(py / scale, 3)])
+                mx, my = metre_point(poly_units[i])
+                polyline_m.append([round(mx, 3), round(my, 3)])
                 if i > 0:
                     prev_x = float(poly_units[i - 1]["x"])
                     prev_y = float(poly_units[i - 1]["y"])

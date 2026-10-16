@@ -2,9 +2,43 @@
 
 Normalize a trusted ResPlan floor plan, place the minimum feasible number of hubs, route one closed cable ring per hub, and independently verify the result. The solver minimizes hub count first, then `J = L + 5X + O + 0.5B`.
 
-[Launch the Streamlit app](https://hackhive-cable-planner.streamlit.app/)
+## React floor-plan demo
 
-The hosted app can run the checked-in example plans 13033 and 14433. Local runs can also use a trusted ResPlan archive.
+The React + FastAPI demo uses the trusted local `ResPlan.pkl` and `split.json`. The picker features **14433**, **13033**, and **14926** when they occur in the split, and searches every listed ID. Pressing **Run** normalizes and solves the selected plan again. Some raw plans have unusable geometry; the API reports diagnostics instead of inventing a solution. ResPlan data has development fallback nodes rather than organizer-supplied fixed nodes.
+
+The input and independently checked output plans appear in large stacked views. A valid result also opens an interactive Three.js floor-plan viewer with assigned-room colors, schematic walls, windows, verified door and open-passage markers, every hub and node, and the solver's exact cable polylines. Select a hub to inspect its closed sequence, capacity, route length, and relevant diagnostics; select a node to see its room, hub, ring position, and coordinates. Drag to orbit, scroll to zoom, right-drag or use focused arrow keys to pan, or use **Top view** and **Reset camera**. Playback reveals the cable from hub through every assigned node and back to the same hub at an adjustable **simulated** speed. The 2D source has no wall elevations or door-leaf widths, so 3D wall height and opening width are visual conventions; floor, portal, node, hub, and cable positions retain their checked geometry.
+
+From this repository root, install and start the API and frontend in separate terminals:
+
+```powershell
+uv venv .venv
+uv pip install --python .venv/Scripts/python.exe -e .
+npm --prefix frontend ci
+.venv/Scripts/python.exe -m uvicorn cable_planner.web.app:app --reload --port 8000
+```
+
+```powershell
+npm --prefix frontend run dev
+```
+
+Open `http://localhost:5173`. Vite proxies `/api` to FastAPI. The API also serves the production frontend at `http://localhost:8000` after `npm --prefix frontend run build`.
+
+Local mode reads `archive/ResPlan.pkl` and `archive/split.json` in this checkout or its parent directory. Set `RESPLAN_ARCHIVE_PATH` and `RESPLAN_SPLIT_PATH` to other **trusted server-side files** if needed; the browser cannot upload a pickle or select arbitrary server paths. The first local lookup loads the archive into a process cache, so its load time may be much longer than later lookups.
+
+For a single-container build:
+
+```powershell
+docker build -t cable-ring-demo .
+docker run --rm -p 8000:8000 -v "E:\dev\HackHive\archive:/app/archive:ro" cable-ring-demo
+```
+
+Open `http://localhost:8000`. The read-only archive mount is required for the local dataset picker.
+
+The runtime panel reports server load, normalization, solve, validation, and render/export times for each run, plus total server time. Thumbnail generation, browser transfer, and 3D playback are outside the server timer. The viewer's estimated duration is its checked loop length divided by the selected simulated speed; it is not a solver prediction or a physical cable velocity. The objective panel uses the independent checker's `H`, `L`, `X`, `O`, `B`, `J`, and area gap; `best_known` does not claim global optimality.
+
+Two JSON downloads are available after a run. **Development Plan + Solution** follows `shared/schema/common.schema.json` in drawing units. **Slide 8 submission · provisional** follows the slide example in metres with a lower-left origin and is offered only when independent validation passes. The organizers have not published a complete machine-readable submission schema, so this export must be reviewed against any newer organizer contract before submission.
+
+The earlier Streamlit interface remains in `cable_planner/demo/app.py` for repository history; the React demo above is the local dataset workflow.
 
 ## Layout
 
@@ -13,7 +47,7 @@ The hosted app can run the checked-in example plans 13033 and 14433. Local runs 
 | `cable_planner/ingestion/`, `cable_planner/geometry/` | Input normalization and traversability |
 | `cable_planner/solver/` | Hub placement, connected assignment, and cable routing |
 | `cable_planner/validation/`, `cable_planner/metrics/` | Independent rule checks and scoring |
-| `cable_planner/visualization/`, `cable_planner/demo/` | Checked overlays and the Streamlit app |
+| `cable_planner/visualization/`, `cable_planner/web/` | Checked 2D overlays, local API, and architectural 3D geometry |
 | `shared/schema/` | Development Plan and Solution contract |
 | `tests/` | Ingestion, solver, and validation tests |
 | `examples/outputs/` | Checked sample plans and submission JSON |

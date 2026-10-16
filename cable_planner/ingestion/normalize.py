@@ -188,7 +188,10 @@ def normalize_plan(
         for room in rooms:
             poly = room_geoms[room["id"]]
             if room["kind"] not in ("balcony", "garden", "pool", "parking") and not boundary.buffer(tolerance).covers(poly):
-                diagnostics.append(_diagnostic("room_outside_boundary", "room extends beyond internal boundary", room["id"]))
+                outside_m2 = poly.difference(boundary.buffer(tolerance)).area / scale**2
+                diagnostics.append(_diagnostic("room_outside_boundary",
+                                               f"room extends beyond internal boundary ({outside_m2:.6g} m2 outside)",
+                                               room["id"]))
             if room["eligible"] and room["area_m2"] > rules.max_area_m2_per_hub + rules.geometry_tolerance_m:
                 diagnostics.append(_diagnostic("room_over_capacity", "single eligible room exceeds hub area capacity", room["id"]))
     else:
@@ -218,10 +221,32 @@ def normalize_plan(
         else:
             point = polylabel(poly, tolerance=max(scale * 0.01, 1e-6))
             source = "development_fallback"
-        if not poly.contains(point) or poly.boundary.distance(point) + tolerance < clearance or any(
-            obstacle.distance(point) + tolerance < clearance for obstacle in blocked
-        ):
-            diagnostics.append(_diagnostic("invalid_fixed_node", "node is outside room or lacks wall clearance", room_id))
+
+        def has_clearance(candidate: Point) -> bool:
+            return (poly.contains(candidate)
+                    and poly.boundary.distance(candidate) + tolerance >= clearance
+                    and all(obstacle.distance(candidate) + tolerance >= clearance for obstacle in blocked))
+
+        if source == "development_fallback" and not has_clearance(point):
+            # The room's pole of inaccessibility can be close to an interior
+            # wall. Search the inset room after subtracting wall/window buffers.
+            minimum = max(clearance - tolerance, 0.0)
+            usable = poly.buffer(-minimum)
+            for obstacle in blocked:
+                if usable.is_empty:
+                    break
+                usable = usable.difference(obstacle.buffer(minimum))
+            for part in sorted(_parts(usable), key=lambda part: (-part.area, part.bounds)):
+                candidate = polylabel(part, tolerance=max(scale * 0.01, 1e-6))
+                if has_clearance(candidate):
+                    point = candidate
+                    break
+
+        if not has_clearance(point):
+            message = (f"no fallback point meets {rules.node_wall_clearance_m:g} m wall clearance; "
+                       f"approximate maximum room-boundary clearance is {poly.boundary.distance(point) / scale:.3g} m"
+                       if source == "development_fallback" else "node is outside room or lacks wall clearance")
+            diagnostics.append(_diagnostic("invalid_fixed_node", message, room_id))
             continue
         nodes.append({"id": f"node:{room_id.removeprefix('room:')}", "room_id": room_id,
                       "point": _point(point.x, point.y), "source": source})

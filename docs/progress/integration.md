@@ -167,3 +167,90 @@
 - Open: none.
 - Next: clone or fetch `main`, verify the tag, and create the experiment branch using the saved prompt.
 - Commit/PR: pending
+
+## 2026-10-16 — React floor-plan demo and checked API
+
+- Status: done
+- Changed: `frontend/`, `cable_planner/web/`, three bundled normalized plans in `examples/inputs/`, the slide-style exporter, Docker and dependency files, API tests, and README
+- Why: let visitors pick three presets or a local `split.json` ID, compare normalized input with independently checked output, and see measured runtime stages and every term of `J`
+- Checked: React production build passed; 56 repository tests passed, then all six focused web tests passed after adding malformed-geometry coverage; live bundled runs of 13033, 14433, and 14926 and a local archive run of 14926 all passed independent validation and produced both JSON views; browser checks at 360, 390, 820, and 1440 px found no page-level horizontal overflow
+- Open: Docker engine is unavailable in this environment, so the container build was not run; the organizer's complete machine-readable submission schema is still unavailable, so the slide-8 export remains explicitly provisional
+- Next: smoke-test the Docker image on a machine with Docker and review the UI/API change before merging
+- Commit/PR: pending
+
+## 2026-10-16 — Place fallback nodes clear of interior walls
+
+- Status: done
+- Changed: `cable_planner/ingestion/normalize.py`, `tests/ingestion/test_normalize.py`
+- Why: plan 11927's kitchen had legal node space, but the room-only pole of inaccessibility landed 0.323 m from an interior wall and caused normalization to fail at the 0.5 m clearance rule.
+- Changed: when the first development fallback is illegal, search the room inset after subtracting wall and window clearance buffers; keep organizer-supplied nodes immutable and report a clearer error when no fallback point exists.
+- Checked: eight ingestion tests passed and the full repository suite passed (59 tests); local plan 11927 normalized with five nodes, solved with two hubs, passed independent validation, and produced schema-valid development JSON. After restarting the local server, its preview returned HTTP 200 and its run returned a valid two-hub solution with both images and the provisional submission (63.6947 s measured total).
+- Open: organizer-supplied fixed nodes and the final organizer submission schema remain unavailable.
+- Next: review the change before merging.
+- Commit/PR: pending
+
+## 2026-10-16 — Explain plan 11928 source-geometry failure
+
+- Status: done
+- Changed: `cable_planner/ingestion/normalize.py`, `tests/ingestion/test_normalize.py`
+- Why: plan 11928 contains a 1.43144 m2 living fragment outside its internal boundary and two living fragments with only about 0.178 m and 0.00407 m maximum room-boundary clearance. Neither can satisfy the required 0.5 m node clearance; two doors also touch three room polygons each.
+- Changed: boundary and fallback-node diagnostics now report measured outside area and approximate room-boundary clearance, so the user can distinguish unrecoverable source geometry from a fallback placement bug. No source components are silently discarded and no ambiguous door is assigned to a guessed pair.
+- Checked: nine ingestion tests and six web tests passed outside the Windows sandbox; after restarting the local server, the 11928 preview returned HTTP 422 with the measured structured diagnostics.
+- Open: plan 11928 needs corrected source polygons or an explicitly approved rule for excluding these labeled living fragments before it can produce a valid output.
+- Next: obtain corrected source geometry if this ID must be runnable.
+- Commit/PR: pending
+
+## 2026-10-17 — Local dataset picker and interactive route viewer
+
+- Status: done
+- Changed: `frontend/`, `cable_planner/web/`, `tests/web/`, `README.md`
+- Why: focus the React interface on localhost data from trusted `ResPlan.pkl` and `split.json`, make the 2D input/output diagrams readable, and expose the independently checked physical route in 3D.
+- Changed: removed the bundled/local source choice from the React UI; stacked the input and checked output views at full width; added a dataset-backed picker, route-aware 3D architectural display, dynamic hub/node selection, exact-polyline ring playback, camera controls, and simulated speed controls. Line-shaped and polygon-shaped windows render as translucent architectural features; fitted camera distance responds to the scene aspect ratio.
+- Checked: `npm run build` and `npm test` pass (3 route tests); the web/API suite passes (8 tests), including local split lookup, previews, schema-valid output, provisional export gating, and polygon/line window geometry; `git diff --check` passes. A live local 13033 run independently validated and displayed three dynamic hub controls, stacked 2D plans, and the 3D viewer. The production build emits a 610 KB lazy Three.js viewer chunk (156 KB gzip).
+- Open: Docker engine is unavailable, so the image build has not been smoke-tested. Wall height and opening width are schematic because source plans are 2D; submission export remains provisional until an organizer schema is published.
+- Next: review and merge the integration change.
+- Commit/PR: pending
+
+## 2026-10-17 — Place 2D plans side by side above the 3D viewer
+
+- Status: done
+- Changed: `frontend/src/style.css`
+- Why: show the input and checked output floor plans together for direct comparison, with the existing 3D viewer following beneath them.
+- Changed: use two equal-width 2D panels on desktop and stack them below 760 px; reduce desktop image-frame height to suit the two-column layout. The 3D section remains the next section after the comparison.
+- Checked: production frontend build passed, all 3 route tests passed, and `git diff --check` passed.
+- Open: a post-build browser inspection was blocked by the browser URL policy; the desktop/mobile grid behavior is verified in the compiled CSS.
+- Next: none.
+- Commit/PR: pending
+
+## 2026-10-17 — Fix plan preview label overlap and image clipping
+
+- Status: done
+- Changed: `cable_planner/web/app.py`, `frontend/src/style.css`, `tests/web/test_app.py`, `tests/validation/test_visualization.py`
+- Why: selecting plan 13033 showed overlapping labels in the input preview, and the fixed-height image frame clipped the lower floor-plan geometry.
+- Changed: previews now use the same 12x10-inch plot layout as post-run input images at a lower DPI. The 2D image frame follows the image's natural aspect ratio instead of hiding overflow. Added checks for readable 13033 labels and full-size preview images across all three presets.
+- Checked: full Python test suite passed (63 tests); frontend production build and all three frontend tests passed; `git diff --check` passed. Vite reports the expected large Three.js viewer chunk.
+- Open: Docker engine is unavailable, so the image build has not been smoke-tested.
+- Next: finish frontend verification and review the integration change.
+- Commit/PR: pending
+
+## 2026-10-17 — Prevent label collisions on dense dataset plans
+
+- Status: done
+- Changed: `cable_planner/visualization/renderer.py`, `tests/validation/test_visualization.py`
+- Why: dense local plans can still have room and node ID labels colliding even when rendered at the full plot size.
+- Changed: place node and room IDs into nearby free display space with collision checks; omit a label only when the drawing cannot fit it without overlap. Added a stress test with twelve IDs sharing the same anchor.
+- Checked: full Python suite passed (64 tests), including all three preview endpoints and the dense-label stress test.
+- Open: the local development server must reload/restart to use the updated renderer; no listener was found on port 8000 during verification.
+- Next: reload the local frontend/backend and review a dense plan preview.
+- Commit/PR: pending
+
+## 2026-10-17 — Match selected preview to post-run input image
+
+- Status: done
+- Changed: `cable_planner/web/app.py`, `cable_planner/visualization/renderer.py`, `tests/web/test_app.py`
+- Why: the selected-plan preview used 110 DPI, while the post-run input used the renderer's 200 DPI default, so the same plan appeared at different relative scales.
+- Changed: both paths now use the exact same render settings and PNG export. Collision placement runs after final plot bounds are established, and preview responses disable caching to avoid stale thumbnails.
+- Checked: the preview test compares each preset's PNG byte-for-byte with the post-run input render and checks the no-store header; full backend suite passed (64 tests).
+- Open: the local development server must reload/restart to use the updated renderer.
+- Next: run verification and reload the local service.
+- Commit/PR: pending
