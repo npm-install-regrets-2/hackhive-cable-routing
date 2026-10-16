@@ -15,3 +15,8 @@ def test_streamlit_app_starts_with_current_solver():
     assert not page.exception
     assert page.button[0].label == "Run planner"
     assert "grid_router.py" in page.caption[1].value
+    assert page.radio[0].options == [
+        "Bundled examples (cloud-ready)",
+        "Trusted local ResPlan archive",
+    ]
+    assert page.selectbox[0].options == ["13033", "14433"]

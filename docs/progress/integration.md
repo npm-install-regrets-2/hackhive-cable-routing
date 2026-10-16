@@ -90,3 +90,14 @@
 - Open: none for this integration pass.
 - Next: changes are ready to fast-forward into `main`.
 - Commit/PR: `d930234` integrates the package; merge from `origin/main` recorded in the following merge commit.
+
+## 2026-10-16 — Prepare the Streamlit demo for cloud deployment
+
+- Status: in progress
+- Changed: `cable_planner/demo/app.py`, `tests/validation/test_streamlit_app.py`
+- Why: the local demo depended on a 300 MB ignored ResPlan pickle, which is unavailable in a hosted Streamlit app and must not be exposed as an arbitrary pickle upload.
+- Changed: added checked-in normalized JSON examples (plans 13033 and 14433) as cloud-ready run inputs while preserving the trusted local archive option.
+- Checked: Streamlit AppTest passed (1 test); Windows temporary-directory cleanup printed a permission warning after the successful test result.
+- Open: deploy the app from GitHub and add its live URL to the `main` README.
+- Next: publish this update, deploy through Streamlit Community Cloud, and update the main-branch README with the resulting URL.
+- Commit/PR: pending
