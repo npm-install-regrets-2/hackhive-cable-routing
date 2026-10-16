@@ -130,20 +130,40 @@
 
 ## 2026-10-16 — Keep hubs separated from fixed nodes and render single-node loops
 
-- Status: in progress
+- Status: done
 - Changed: `cable_planner/solver/grid_router.py`, `cable_planner/visualization/renderer.py`, `tests/solver/test_grid_router.py`
 - Why: prevent hub/node overlap and give single-node territories a visible closed ring when a legal offset exists.
-- Checked: `git apply --check` passed; patch applied cleanly. No tests run.
-- Open: validate the changed solutions and updated route-cost bounds with the owned solver and independent-validator tests.
-- Next: run focused tests and review the resulting changes.
+- Checked: `git apply --check` passed; focused solver and independent-validator coverage passed after the test migration.
+- Open: none.
+- Next: none.
 - Commit/PR: pending
 
 ## 2026-10-16 — Prefer greater cable wall clearance with feasible fallbacks
 
-- Status: in progress
+- Status: done
 - Changed: `cable_planner/solver/grid_router.py`, `tests/solver/test_grid_router.py`
 - Why: request a visibly larger default cable-to-wall clearance and retry smaller configured clearances only when the solver reports infeasibility.
-- Checked: `git apply --check` passed; patch applied cleanly. Tests pending.
-- Open: verify fallback behavior and focused solver/validator cases.
-- Next: run targeted tests and report outcomes.
+- Checked: `git apply --check` passed; solver tests passed after adding a regression for fallback order.
+- Open: none.
+- Next: none.
+- Commit/PR: pending
+
+## 2026-10-16 — Move placement coverage to the active solver
+
+- Status: done
+- Changed: `tests/validation/test_hub_placement_scenarios.py`, `tests/solver/test_grid_router.py`
+- Why: the placement scenarios were still exercising the retired `thin_slice` solver; migrate them to the app's `grid_router` implementation and cover hub/node separation and clearance fallback.
+- Checked: `python -m pytest tests/solver/test_grid_router.py tests/validation/test_hub_placement_scenarios.py -q` (16 passed); full suite `python -m pytest tests -q` (51 passed in 117.54s) outside the sandbox because Streamlit AppTest requires a Windows asyncio socketpair.
+- Open: none.
+- Next: none.
+- Commit/PR: pending
+
+## 2026-10-16 — Checkpoint baseline before joint hub-route experiments
+
+- Status: done
+- Changed: `docs/experiments/joint-hub-route-optimization-prompt.md`, `docs/progress/integration.md`; checkpoint tag planned as `checkpoint/pre-joint-hub-route-search`
+- Why: preserve the validated production pipeline before testing broader hub-placement and ring-route search.
+- Checked: the full suite passed (51 tests in 117.54s); verified the current search caps and per-ring routing boundary in `grid_router.py`.
+- Open: none.
+- Next: clone or fetch `main`, verify the tag, and create the experiment branch using the saved prompt.
 - Commit/PR: pending

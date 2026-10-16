@@ -16,10 +16,8 @@ from shapely.geometry import Point, box
 
 from cable_planner.validation.checker import IndependentValidator
 from cable_planner.validation.rules import ValidationConfig
-from cable_planner.demo.end_to_end import run_full_pipeline
-
-# Exercise the legacy thin solver explicitly for placement scenarios.
-from cable_planner.solver.thin_slice import solve, hub_count_lower_bound
+# Exercise the solver used by the app and end-to-end pipeline.
+from cable_planner.solver.grid_router import solve, hub_count_lower_bound
 
 
 def make_box_poly(x1, y1, x2, y2):

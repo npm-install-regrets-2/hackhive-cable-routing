@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 import pytest
 import networkx as nx
@@ -54,6 +55,38 @@ def test_grid_router_with_obstacle(plan):
     assert solution["status"] == "feasible"
     assert len(solution["hubs"]) == 1
     assert len(solution["rings"]) == 1
+
+
+def test_hub_candidates_keep_clear_of_every_fixed_node(plan):
+    candidates = find_legal_hub_candidates(plan)
+    min_separation = (
+        grid_router_module.HUB_NODE_MIN_SEPARATION_M
+        * plan["drawing_units_per_metre"]
+    )
+    tolerance = plan["rules"]["geometry_tolerance"] * plan["drawing_units_per_metre"]
+
+    assert candidates
+    for candidate in candidates:
+        hub_point = candidate["point"]
+        for node in plan["nodes"]:
+            node_point = (node["point"]["x"], node["point"]["y"])
+            assert math.dist(hub_point, node_point) + tolerance >= min_separation
+
+
+def test_solver_relaxes_cable_clearance_only_after_infeasibility(monkeypatch, plan):
+    attempted = []
+
+    def fake_solve(_plan, *, cable_wall_clearance_m):
+        attempted.append(cable_wall_clearance_m)
+        status = "infeasible" if cable_wall_clearance_m > 0.1 else "feasible"
+        return {"status": status, "clearance": cable_wall_clearance_m}
+
+    monkeypatch.setattr(grid_router_module, "_solve_with_clearance", fake_solve)
+
+    solution = solve(plan)
+
+    assert attempted == [0.2, 0.15, 0.1]
+    assert solution == {"status": "feasible", "clearance": 0.1}
 
 
 def test_indexed_route_penalties_match_full_edge_scan(monkeypatch):
