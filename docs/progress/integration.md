@@ -93,11 +93,12 @@
 
 ## 2026-10-16 — Prepare the Streamlit demo for cloud deployment
 
-- Status: in progress
+- Status: app changes complete; deployment blocked pending organization OAuth authorization
 - Changed: `cable_planner/demo/app.py`, `tests/validation/test_streamlit_app.py`
 - Why: the local demo depended on a 300 MB ignored ResPlan pickle, which is unavailable in a hosted Streamlit app and must not be exposed as an arbitrary pickle upload.
 - Changed: added checked-in normalized JSON examples (plans 13033 and 14433) as cloud-ready run inputs while preserving the trusted local archive option.
 - Checked: Streamlit AppTest passed (1 test); Windows temporary-directory cleanup printed a permission warning after the successful test result.
-- Open: deploy the app from GitHub and add its live URL to the `main` README.
-- Next: publish this update, deploy through Streamlit Community Cloud, and update the main-branch README with the resulting URL.
-- Commit/PR: pending
+- Checked: Streamlit Community Cloud rejected the deployment from `main` because the `npm-install-regrets-2` GitHub organization restricts OAuth app access. No organization permissions were changed.
+- Open: an organization owner must authorize Streamlit Community Cloud to access the repository before deployment can proceed; then add the live URL to the `main` README.
+- Next: resume deployment after the organization grants Streamlit repository access.
+- Commit/PR: `14e674d`; deployment-blocker note pending
