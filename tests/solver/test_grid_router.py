@@ -152,7 +152,7 @@ def test_plan_14433_compares_connected_partitions_by_checked_cost():
     assert report.is_valid
     assert report.recomputed_metrics.crossings == 0
     assert report.recomputed_metrics.overlap_m <= _stub_overlap_limit_m(solution)
-    assert report.recomputed_metrics.route_cost < 48.0  # incl. visible single-node hub stub
+    assert report.recomputed_metrics.route_cost < 50.0  # incl. visible single-node hub loop and 0.2 m cable-wall clearance
     assert report.recomputed_metrics.area_gap_m2 < 86.2188
     assert sorted(sum(a["hub_id"] == h["id"] for a in solution["assignments"]) for h in solution["hubs"]) == [1, 4]
     rank = _fixed_hub_solution_rank(

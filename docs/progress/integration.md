@@ -137,3 +137,13 @@
 - Open: validate the changed solutions and updated route-cost bounds with the owned solver and independent-validator tests.
 - Next: run focused tests and review the resulting changes.
 - Commit/PR: pending
+
+## 2026-10-16 — Prefer greater cable wall clearance with feasible fallbacks
+
+- Status: in progress
+- Changed: `cable_planner/solver/grid_router.py`, `tests/solver/test_grid_router.py`
+- Why: request a visibly larger default cable-to-wall clearance and retry smaller configured clearances only when the solver reports infeasibility.
+- Checked: `git apply --check` passed; patch applied cleanly. Tests pending.
+- Open: verify fallback behavior and focused solver/validator cases.
+- Next: run targeted tests and report outcomes.
+- Commit/PR: pending

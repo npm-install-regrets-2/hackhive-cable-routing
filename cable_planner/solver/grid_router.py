@@ -412,7 +412,24 @@ def _portal_connectivity(plan: Dict[str, Any], eligible_room_ids: Set[str]) -> n
     return g
 
 
-def solve(plan: Dict[str, Any], *, cable_wall_clearance_m: float = 0.03) -> Dict[str, Any]:
+# Cables keep this distance from walls and door jambs (visible gap in renders). If a
+# plan has no feasible ring at that clearance, progressively smaller values are tried.
+CABLE_WALL_CLEARANCE_M = 0.2
+CABLE_WALL_CLEARANCE_FALLBACKS_M = (0.15, 0.1, 0.05, 0.03)
+
+
+def solve(plan: Dict[str, Any], *, cable_wall_clearance_m: float = CABLE_WALL_CLEARANCE_M) -> Dict[str, Any]:
+    """Solve with the requested cable-wall clearance, relaxing it only if infeasible."""
+    ladder = [cable_wall_clearance_m] + [c for c in CABLE_WALL_CLEARANCE_FALLBACKS_M if c < cable_wall_clearance_m]
+    solution: Dict[str, Any] = {}
+    for clearance in ladder:
+        solution = _solve_with_clearance(plan, cable_wall_clearance_m=clearance)
+        if solution.get("status") != "infeasible":
+            break
+    return solution
+
+
+def _solve_with_clearance(plan: Dict[str, Any], *, cable_wall_clearance_m: float) -> Dict[str, Any]:
     """
     Main entry point for capacity-constrained rectilinear closed-ring optimization.
     Guarantees:
