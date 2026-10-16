@@ -108,11 +108,12 @@
 
 ## 2026-10-16 — Hide local archive controls on the hosted app
 
-- Status: implementation complete; hosted redeploy pending
+- Status: complete
 - Changed: `cable_planner/demo/app.py`, `cable_planner/demo/environment.py`, `tests/validation/test_streamlit_environment.py`
 - Why: the hosted app displayed a local archive path field, which users could mistake for a way to read files from their own computers. Streamlit resolves paths on the app server.
 - Changed: use the browser host from `st.context.url` to expose only bundled examples on Streamlit Community Cloud; keep the trusted archive option for local sessions. Show a message explaining the limitation.
 - Checked: deployment-source checks and Streamlit AppTest passed (3 tests). Pytest's Windows temporary-directory cleanup emitted a permission warning after the passing result.
-- Open: push to `main` and verify the automatic hosted redeploy hides the archive control.
-- Next: verify the hosted UI after the `main` push.
-- Commit/PR: pending
+- Checked: after pushing to `main`, the hosted app showed only the example selector and the local-file explanation; the archive path control was absent.
+- Open: none.
+- Next: none.
+- Commit/PR: `eb0a343`
