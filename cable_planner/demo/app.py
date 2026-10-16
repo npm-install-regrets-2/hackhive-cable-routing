@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 from cable_planner.ingestion.normalize import load_trusted_plan, normalize_plan  # noqa: E402
 from cable_planner.validation.checker import IndependentValidator  # noqa: E402
 from cable_planner.export import format_official_submission  # noqa: E402
+from cable_planner.demo.environment import available_plan_sources  # noqa: E402
 from cable_planner.visualization.renderer import render_input_plan, render_solution_overlay  # noqa: E402
 import cable_planner.solver.grid_router as grid_router  # noqa: E402
 
@@ -28,11 +29,19 @@ solver_path = Path(grid_router.__file__).resolve()
 solver_version = hashlib.sha256(solver_path.read_bytes()).hexdigest()[:12]
 st.caption(f"Running solver: {solver_path} (source {solver_version})")
 
-plan_source = st.radio(
-    "Plan source",
-    ("Bundled examples (cloud-ready)", "Trusted local ResPlan archive"),
-    horizontal=True,
-)
+plan_sources = available_plan_sources(st.context.url)
+if len(plan_sources) == 1:
+    st.info(
+        "This hosted app can use the bundled examples only. It cannot read files from your computer. "
+        "To use a local ResPlan archive, run the app on the same machine that can access that file."
+    )
+    plan_source = plan_sources[0]
+else:
+    plan_source = st.radio(
+        "Plan source",
+        plan_sources,
+        horizontal=True,
+    )
 if plan_source == "Bundled examples (cloud-ready)":
     plan_id = st.selectbox("Example plan ID", (13033, 14433), index=0)
 else:

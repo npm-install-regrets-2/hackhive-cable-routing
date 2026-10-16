@@ -20,14 +20,22 @@ The hosted app can run the checked-in example plans 13033 and 14433. Local runs 
 
 ## Run locally
 
-Install the project in an environment with Python 3.11 or newer:
+To use your own `ResPlan.pkl`, run the app on the same computer (or server) that can read that file. A path entered in the hosted app refers to Streamlit's server, not to your computer, so the hosted app only offers the checked-in examples.
+
+From the repository root, install the project in an environment with Python 3.11 or newer and start Streamlit:
 
 ```powershell
 python -m pip install -e .
 python -m streamlit run cable_planner/demo/app.py
 ```
 
-Open `http://localhost:8501`, enter a plan ID, and click **Run planner**. The app defaults to plan 13033 and shows the independently checked cost and input/output floor plans. It looks for `ResPlan.pkl` in either `../archive/` or `./archive/`; the archive path can also be entered in the app. Only use the locally trusted archive because Python pickle can execute code.
+In the app at `http://localhost:8501`:
+
+1. Select **Trusted local ResPlan archive**.
+2. Enter the full path to your archive, for example `E:\dev\HackHive\archive\ResPlan.pkl`.
+3. Enter the plan ID and click **Run planner**.
+
+The archive path defaults to `../archive/ResPlan.pkl` or `./archive/ResPlan.pkl` when either exists. Only load a pickle archive you trust because pickle files can execute code.
 
 For a command-line run:
 
