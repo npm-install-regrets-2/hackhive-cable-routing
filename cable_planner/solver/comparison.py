@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import json
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional
@@ -17,9 +18,17 @@ from cable_planner.validation.models import ValidationReport
 
 Criterion = Literal["zero_crossings", "zero_overlap"]
 CandidateKey = tuple[float, int]
-_SCHEMA = Draft202012Validator(json.loads(
-    (Path(__file__).resolve().parents[2] / "shared/schema/common.schema.json").read_text(encoding="utf-8")
-))
+
+
+@lru_cache(maxsize=1)
+def _solution_schema() -> Draft202012Validator:
+    """Read the development contract when comparison runs, including installed apps."""
+    relative_path = Path("shared/schema/common.schema.json")
+    for root in (Path(__file__).resolve().parents[2], Path.cwd()):
+        path = root / relative_path
+        if path.is_file():
+            return Draft202012Validator(json.loads(path.read_text(encoding="utf-8")))
+    raise FileNotFoundError(f"Development schema {relative_path} is unavailable")
 
 
 @dataclass(frozen=True)
@@ -44,6 +53,7 @@ def solve_with_comparison(
     The observer sees each complete candidate from the existing search. Counts and
     alternatives are filtered to the selected clearance and hub count after solve.
     A candidate must pass the independent validator before it can be displayed.
+    Run from the repository checkout so the shared development schema is available.
     """
     counts: dict[CandidateKey, int] = {}
     qualifying: dict[tuple[CandidateKey, Criterion], int] = {}
@@ -73,7 +83,7 @@ def solve_with_comparison(
                 continue
             candidate["status"] = "feasible" if key[1] == lower_bound else "best_known"
             candidate["lower_bound_hubs"] = lower_bound
-            if not _SCHEMA.is_valid({"schema_version": "0.1.0", "plan": plan, "solution": candidate}):
+            if not _solution_schema().is_valid({"schema_version": "0.1.0", "plan": plan, "solution": candidate}):
                 continue
             report = IndependentValidator().validate(plan, candidate)
             if report.is_valid and report.recomputed_metrics is not None:

@@ -320,4 +320,4 @@
 - Checked: the full suite on current `main` passed in the branch's locked environment (78 tests, one dependency deprecation warning). Plan 4944 yielded nine complete candidates, two zero-crossing; checked J values were 45.0814 and 48.4531. The latest solver progress callback and comparison observer coexist in the same search.
 - Open: public GitHub publication was declined by the user, so teammate PR review, hosted deployment, and hosted rehearsal remain pending.
 - Next: keep the feature local; request fresh approval only if publication is later desired.
-- Commit/PR: local task commits `2d9fbc1` and `d3b13d1`; no PR.
+- Commit/PR: local task commits `2d9fbc1`, `d3b13d1`, and `902f52e`; no PR.

@@ -44,6 +44,8 @@ The React demo above is the local dataset workflow.
 
 [Hosted Streamlit app](https://hackhive-cable-planner.streamlit.app/) (deployment of this branch pending). The Streamlit interface in `cable_planner/demo/app.py` runs checked-in example plans 12014, 8063, 4944, 8061, 13033, and 14433. Plans 12014 and 8063 are quick clean-ring examples. For penalized routes, it shows the best found independently checked zero-crossing or zero-overlap alternative when the bounded search finds one. Plan 4944 illustrates a lower-cost route with a crossing beside a higher-cost zero-crossing route; 8061 illustrates a search with no qualifying alternative found.
 
+Run the comparison from the repository checkout so `shared/schema/common.schema.json` is available for the alternative's schema check.
+
 ## Layout
 
 | Path | Purpose |
