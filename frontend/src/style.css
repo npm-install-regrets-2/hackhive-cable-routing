@@ -92,6 +92,10 @@ h1 i { color: var(--coral); font-weight: 500; }
 .section-top h2 { margin-top: 7px; }
 .kicker { color: var(--coral); }
 .plan-badge, .status-pill { white-space: nowrap; padding: 8px 10px; border: 1px solid var(--line); font: 700 10px var(--mono); letter-spacing: .06em; }
+.floor-area { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px 13px; margin: 0 0 17px; padding: 10px 12px; border-left: 3px solid var(--olive); background: #f7f0e3; }
+.floor-area span { font: 700 10px var(--mono); letter-spacing: .08em; }
+.floor-area strong { font: 700 18px var(--sans); }
+.floor-area small { color: var(--muted); font: 11px var(--sans); }
 .image-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin-top: 23px; }
 .image-card { min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--line); background: #f2ebda; }
 .image-title { display: flex; align-items: center; gap: 9px; min-height: 56px; padding: 9px 12px; border-bottom: 1px solid var(--line); }

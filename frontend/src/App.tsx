@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import type { Architecture, Development } from './model'
+import { floorPlanAreaM2 } from './planArea'
 
 type PlanOption = { id: number; split: string | null; available?: boolean }
 type Catalog = { sources: string[]; presets: PlanOption[]; results: PlanOption[]; total: number }
@@ -258,6 +259,7 @@ export default function App() {
   }
 
   const metrics = result?.validation.recomputed_metrics
+  const floorAreaM2 = result ? floorPlanAreaM2(result.development.plan) : null
   const comparison = result?.comparison?.criterion ? result.comparison : null
   const alternative = comparison?.alternative
   const alternativeMetrics = alternative?.validation.recomputed_metrics
@@ -307,6 +309,7 @@ export default function App() {
         <div className="content-stack">
           <section className="comparison panel">
             <div className="section-top"><div><span className="kicker">02 / VISUAL COMPARISON</span><h2>Floor-plan workspace</h2></div><span className="plan-badge">PLAN #{selected}</span></div>
+            {floorAreaM2 !== null && <div className="floor-area"><span>WHOLE FLOOR-PLAN AREA</span><strong>{number(floorAreaM2, 2)} m²</strong><small>Inside the plan boundary, excluding holes</small></div>}
             {error && <div className="alert" role="alert"><strong>{error.code.replaceAll('_', ' ')}</strong><p>{error.message}</p>{elapsed > 0 && <p>Elapsed before failure: {number(elapsed, 1)} s</p>}{error.diagnostics?.map((item, index) => <p key={index}>{item.code}: {item.message}</p>)}</div>}
             <div className="image-grid">
               <div className="image-card"><div className="image-title"><span className="image-number">A</span><div><strong>{alternative ? 'Selected best found route' : 'Input floor plan'}</strong><small>{alternative ? 'INDEPENDENTLY CHECKED' : 'ROOMS · NODES · PORTALS'}</small></div></div><div className="image-frame"><img key={selected} src={alternative ? result?.output_image ?? previewUrl : result?.input_image ?? previewUrl} alt={alternative ? `Selected route for plan ${selected}` : `Input floor plan ${selected}`} /></div></div>

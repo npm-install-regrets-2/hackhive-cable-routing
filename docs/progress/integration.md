@@ -329,3 +329,10 @@
 - Why: the judge presentation is in the Vite demo. The user confirmed the work must remain local, so no public push or hosted deployment is planned.
 - Checked: a real 4944 API run returned nine complete candidates, two zero-crossing candidates, and independently checked J values 45.0814 and 48.4531. A local headless Edge run clicked **Run plan 4944** in Vite, loaded both overlays, and displayed the checked table, +3.3717 J difference, and two download buttons. Full Python suite passed (74 tests, one dependency deprecation warning); frontend production build and three frontend tests passed; `git diff --check` passed.
 - Open: teammate review and hosted rehearsal require later publication authorization.
+
+## 2026-10-17 — Show total floor-plan area in Vite
+
+- Status: implemented locally.
+- Changed: the Vite floor-plan workspace now shows the area inside the plan's internal boundary, less holes, converted from drawing units to m². Kept the separate area-gap metric so the two measurements are distinguishable.
+- Why: the existing room labels and area gap did not show one total for the whole floor plan.
+- Checked: a polygon-with-hole unit test covers boundary subtraction and unit conversion; four frontend tests and the production build passed. Plan 4944's footprint calculates to 121.888736 m², displayed as 121.89 m².
