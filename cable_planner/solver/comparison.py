@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 import json
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Callable, Dict, Literal, Optional
 
 from jsonschema import Draft202012Validator
 
@@ -47,6 +47,7 @@ class ComparisonResult:
 
 def solve_with_comparison(
     plan: Dict[str, Any], *, cable_wall_clearance_m: float = grid_router.CABLE_WALL_CLEARANCE_M,
+    progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
 ) -> ComparisonResult:
     """Return the unchanged selected solution and its best found clean comparator.
 
@@ -93,7 +94,8 @@ def solve_with_comparison(
                     best[choice] = (checked_rank, candidate, report)
 
     selected, clearance = grid_router._solve_observed(
-        plan, cable_wall_clearance_m=cable_wall_clearance_m, candidate_observer=observe,
+        plan, cable_wall_clearance_m=cable_wall_clearance_m,
+        progress_callback=progress_callback, candidate_observer=observe,
     )
     selected_report = IndependentValidator().validate(plan, selected)
     selected_metrics = selected_report.recomputed_metrics

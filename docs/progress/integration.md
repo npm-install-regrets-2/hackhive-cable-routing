@@ -321,3 +321,11 @@
 - Open: public GitHub publication was declined by the user, so teammate PR review, hosted deployment, and hosted rehearsal remain pending.
 - Next: keep the feature local; request fresh approval only if publication is later desired.
 - Commit/PR: local task commits `2d9fbc1`, `d3b13d1`, and `902f52e`; no PR.
+
+## 2026-10-17 — Move judge comparison to the Vite demo
+
+- Status: implemented and checked locally.
+- Changed: restored the Streamlit app to its prior behavior and connected `solve_with_comparison` to the FastAPI run endpoint and Vite/React UI. Added bundled normalized plan 4944, a same-run comparison payload, two checked overlays, metric table, J difference, alternative availability message, and separate checked JSON downloads. The existing `solve` output and shared schema remain unchanged.
+- Why: the judge presentation is in the Vite demo. The user confirmed the work must remain local, so no public push or hosted deployment is planned.
+- Checked: a real 4944 API run returned nine complete candidates, two zero-crossing candidates, and independently checked J values 45.0814 and 48.4531. A local headless Edge run clicked **Run plan 4944** in Vite, loaded both overlays, and displayed the checked table, +3.3717 J difference, and two download buttons. Full Python suite passed (74 tests, one dependency deprecation warning); frontend production build and three frontend tests passed; `git diff --check` passed.
+- Open: teammate review and hosted rehearsal require later publication authorization.

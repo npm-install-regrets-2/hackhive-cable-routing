@@ -68,7 +68,7 @@ def test_overlap_only_selection_chooses_zero_overlap(monkeypatch):
     alternative = copy.deepcopy(selected)
     alternative["diagnostics"][0]["code"] = "ZERO_OVERLAP_TEST"
 
-    def fake_solve(_plan, *, cable_wall_clearance_m, candidate_observer):
+    def fake_solve(_plan, *, cable_wall_clearance_m, candidate_observer, progress_callback=None):
         candidate_observer(copy.deepcopy(selected), cable_wall_clearance_m)
         candidate_observer(copy.deepcopy(alternative), cable_wall_clearance_m)
         return selected, cable_wall_clearance_m

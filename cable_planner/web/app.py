@@ -22,14 +22,14 @@ from pydantic import BaseModel
 
 from cable_planner.export import format_official_submission
 from cable_planner.ingestion.normalize import normalize_plan
-from cable_planner.solver import solve
+from cable_planner.solver import solve, solve_with_comparison
 from cable_planner.validation.checker import IndependentValidator
 from cable_planner.visualization.renderer import render_input_plan, render_solution_overlay
 from cable_planner.web.architecture import architecture_solids
 from cable_planner.web.run_progress import RunProgress
 
 ROOT = Path(__file__).resolve().parents[2]
-PRESETS = (14433, 13033, 14926)
+PRESETS = (4944, 14433, 13033, 14926)
 BUNDLED = ROOT / "examples" / "inputs"
 SCHEMA = ROOT / "shared" / "schema" / "common.schema.json"
 DIST = ROOT / "frontend" / "dist"
@@ -38,6 +38,7 @@ DIST = ROOT / "frontend" / "dist"
 class RunRequest(BaseModel):
     source: Literal["bundled", "local"]
     plan_id: int
+    compare: bool = False
 
 
 class RunReportRequest(BaseModel):
@@ -169,6 +170,15 @@ def _validate_development(document: dict[str, Any]) -> None:
         raise _error(500, "interchange_invalid", f"Development JSON violates shared schema: {errors[0].message}")
 
 
+def _checked_development(plan: dict[str, Any], solution: dict[str, Any], report: Any) -> dict[str, Any]:
+    checked_solution = dict(solution)
+    if report.recomputed_metrics is not None:
+        checked_solution["metrics"] = report.recomputed_metrics.to_dict()
+    document = {"schema_version": "0.1.0", "plan": plan, "solution": checked_solution}
+    _validate_development(document)
+    return document
+
+
 @app.get("/api/catalog")
 def catalog(source: Literal["bundled", "local"] = "bundled", q: str = "", limit: int = Query(50, ge=1, le=100)) -> dict[str, Any]:
     archive, split_path = _local_paths()
@@ -219,8 +229,15 @@ def _execute_run(request: RunRequest, progress: RunProgress | None = None) -> di
             progress.complete("normalize_plan")
         progress.start("prepare_geometry")
     started = time.perf_counter()
+    comparison_result = None
     try:
-        solution = solve(plan, progress_callback=progress.solver_update) if progress is not None else solve(plan)
+        if request.compare:
+            comparison_result = solve_with_comparison(
+                plan, progress_callback=progress.solver_update if progress is not None else None,
+            )
+            solution = comparison_result.selected
+        else:
+            solution = solve(plan, progress_callback=progress.solver_update) if progress is not None else solve(plan)
     except Exception as exc:
         raise _error(500, "solver_failed", str(exc)) from exc
     timings["solve_s"] = time.perf_counter() - started
@@ -233,17 +250,15 @@ def _execute_run(request: RunRequest, progress: RunProgress | None = None) -> di
         progress.start("validate")
     started = time.perf_counter()
     try:
-        report = IndependentValidator().validate(plan, solution)
+        report = (comparison_result.selected_report if comparison_result is not None
+                  else IndependentValidator().validate(plan, solution))
     except Exception as exc:
         raise _error(500, "validation_failed", str(exc)) from exc
     timings["validate_s"] = time.perf_counter() - started
 
     started = time.perf_counter()
-    checked_solution = dict(solution)
-    if report.recomputed_metrics is not None:
-        checked_solution["metrics"] = report.recomputed_metrics.to_dict()
-    development = {"schema_version": "0.1.0", "plan": plan, "solution": checked_solution}
-    _validate_development(development)
+    development = _checked_development(plan, solution, report)
+    checked_solution = development["solution"]
     if progress is not None:
         progress.complete("validate")
         progress.start("render_export")
@@ -255,6 +270,31 @@ def _execute_run(request: RunRequest, progress: RunProgress | None = None) -> di
         output_image = (_png_data_uri(render_solution_overlay(plan, checked_solution, report))
                         if solution.get("rings") else None)
         architecture = architecture_solids(plan)
+        comparison = None
+        if comparison_result is not None:
+            comparison = {
+                "criterion": comparison_result.criterion,
+                "candidate_count": comparison_result.candidate_count,
+                "qualifying_candidate_count": comparison_result.qualifying_candidate_count,
+                "clearance_m": comparison_result.clearance_m,
+                "alternative": None,
+            }
+            alternative = comparison_result.alternative
+            alternative_report = comparison_result.alternative_report
+            if alternative is not None and alternative_report is not None:
+                if not alternative_report.is_valid or alternative_report.recomputed_metrics is None:
+                    raise ValueError("Comparison alternative failed independent validation")
+                alternative_development = _checked_development(plan, alternative, alternative_report)
+                comparison["alternative"] = {
+                    "validation": alternative_report.to_dict(),
+                    "output_image": _png_data_uri(render_solution_overlay(
+                        plan, alternative_development["solution"], alternative_report,
+                    )),
+                    "development": alternative_development,
+                    "submission": format_official_submission(
+                        plan, alternative_development["solution"], alternative_report,
+                    ),
+                }
     except Exception as exc:
         raise _error(500, "render_export_failed", str(exc)) from exc
     timings["render_export_s"] = time.perf_counter() - started
@@ -274,6 +314,7 @@ def _execute_run(request: RunRequest, progress: RunProgress | None = None) -> di
         "architecture": architecture,
         "development": development,
         "submission": submission,
+        "comparison": comparison,
         "fallback_nodes": sum(node.get("source") == "development_fallback" for node in plan.get("nodes", [])),
     }
 
