@@ -317,7 +317,7 @@
 - Status: implemented on isolated `feat/judge-route-comparison-current` branch; review and deployment pending.
 - Changed: `cable_planner/solver/comparison.py`, `grid_router.py`, Streamlit app, focused solver and app tests, README and judge-demo notes. Added bundled examples for 12014, 8063, 4944, and 8061 from the earlier demo selection pass.
 - Why: show judges that plan 4944's selected one-crossing route has lower checked J than the best zero-crossing complete solution found in the same bounded search, while preserving the existing Solution JSON contract.
-- Checked: the full suite passed (61 tests) outside the sandbox, whose Windows temporary-directory locks blocked two test fixtures. Plan 4944 yielded nine complete candidates, two zero-crossing; checked J values were 45.0814 and 48.4531. Hosted rehearsal remains pending.
-- Open: request developer review, merge through project owner, deploy the merged branch, then rehearse plan 4944 in the hosted app.
-- Next: run full tests on the current main baseline and prepare PR after publication approval.
-- Commit/PR: local task commit `2d9fbc1` plus review follow-up; PR pending.
+- Checked: the full suite on current `main` passed in the branch's locked environment (78 tests, one dependency deprecation warning). Plan 4944 yielded nine complete candidates, two zero-crossing; checked J values were 45.0814 and 48.4531. The latest solver progress callback and comparison observer coexist in the same search.
+- Open: public GitHub publication was declined by the user, so teammate PR review, hosted deployment, and hosted rehearsal remain pending.
+- Next: keep the feature local; request fresh approval only if publication is later desired.
+- Commit/PR: local task commits `2d9fbc1` and `d3b13d1`; no PR.
