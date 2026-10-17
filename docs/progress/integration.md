@@ -336,3 +336,10 @@
 - Changed: the Vite floor-plan workspace now shows the area inside the plan's internal boundary, less holes, converted from drawing units to m². Kept the separate area-gap metric so the two measurements are distinguishable.
 - Why: the existing room labels and area gap did not show one total for the whole floor plan.
 - Checked: a polygon-with-hole unit test covers boundary subtraction and unit conversion; four frontend tests and the production build passed. Plan 4944's footprint calculates to 121.888736 m², displayed as 121.89 m².
+
+## 2026-10-17 — Add 16416 cable-management comparison
+
+- Status: implemented locally; focused regression and Vite build in progress.
+- Changed: permit an explicitly requested higher-hub-count comparison search while retaining the original selected minimum-hub solution. The Vite search requests a two-hub clean alternative for local plan 16416 and labels the different hub counts in the comparison explanation.
+- Why: plan 16416 has no zero-crossing candidate among its five one-hub candidates, but a two-hub route provides a checked no-crossing cable-management option.
+- Checked: selected route validates with H=1, X=1, J=58.6637. The additional H=2 search generated 12 complete candidates, all zero-crossing; its best found route validates with J=45.5685.

@@ -39,6 +39,7 @@ class RunRequest(BaseModel):
     source: Literal["bundled", "local"]
     plan_id: int
     compare: bool = False
+    alternative_hub_count: int | None = None
 
 
 class RunReportRequest(BaseModel):
@@ -233,7 +234,9 @@ def _execute_run(request: RunRequest, progress: RunProgress | None = None) -> di
     try:
         if request.compare:
             comparison_result = solve_with_comparison(
-                plan, progress_callback=progress.solver_update if progress is not None else None,
+                plan,
+                progress_callback=progress.solver_update if progress is not None else None,
+                alternative_hub_count=request.alternative_hub_count,
             )
             solution = comparison_result.selected
         else:
@@ -277,6 +280,9 @@ def _execute_run(request: RunRequest, progress: RunProgress | None = None) -> di
                 "candidate_count": comparison_result.candidate_count,
                 "qualifying_candidate_count": comparison_result.qualifying_candidate_count,
                 "clearance_m": comparison_result.clearance_m,
+                "alternative_search_hub_count": comparison_result.alternative_search_hub_count,
+                "alternative_search_candidate_count": comparison_result.alternative_search_candidate_count,
+                "alternative_search_qualifying_candidate_count": comparison_result.alternative_search_qualifying_candidate_count,
                 "alternative": None,
             }
             alternative = comparison_result.alternative

@@ -23,6 +23,8 @@ type ComparisonAlternative = {
 type Comparison = {
   criterion: 'zero_crossings' | 'zero_overlap' | null; candidate_count: number;
   qualifying_candidate_count: number; clearance_m: number;
+  alternative_search_hub_count: number | null; alternative_search_candidate_count: number;
+  alternative_search_qualifying_candidate_count: number;
   alternative: ComparisonAlternative | null
 }
 type RunResult = {
@@ -71,7 +73,7 @@ function initialProgress(): ProgressState {
   }
 }
 
-async function streamRun(request: { source: string; plan_id: number; compare: boolean }, onProgress: (state: ProgressState) => void): Promise<RunResult> {
+async function streamRun(request: { source: string; plan_id: number; compare: boolean; alternative_hub_count?: number }, onProgress: (state: ProgressState) => void): Promise<RunResult> {
   let response: Response
   try {
     response = await fetch('/api/runs/stream', {
@@ -219,7 +221,7 @@ export default function App() {
     setStarted(start)
     setElapsed(0)
     try {
-      const data = await streamRun({ source: presets.includes(selected) ? 'bundled' : 'local', plan_id: selected, compare: true }, setRunProgress)
+      const data = await streamRun({ source: presets.includes(selected) ? 'bundled' : 'local', plan_id: selected, compare: true, ...(selected === 16416 ? { alternative_hub_count: 2 } : {}) }, setRunProgress)
       setResult(data)
       setJsonTab('submission')
     } catch (failure) {
@@ -316,7 +318,7 @@ export default function App() {
               <div className="image-card"><div className="image-title"><span className="image-number coral">B</span><div><strong>{alternative ? `Best found ${comparisonLabel} route` : 'Checked output'}</strong><small>{alternative ? 'INDEPENDENTLY CHECKED' : 'HUBS · TERRITORIES · RINGS'}</small></div></div><div className={`image-frame ${!result?.output_image ? 'empty-frame' : ''}`}>{alternative ? <img src={alternative.output_image} alt={`${comparisonLabel} alternative for plan ${selected}`} /> : result?.output_image ? <img src={result.output_image} alt={`Checked solution for plan ${selected}`} /> : busy && runProgress ? <RunProgressView progress={runProgress} elapsed={elapsed} failed={false} /> : error && runProgress ? <RunProgressView progress={runProgress} elapsed={elapsed} failed /> : <div><span>◇</span><strong>Output awaits a run</strong><small>Select a plan and press Run plan</small></div>}</div></div>
             </div>
             {result && alternative && comparison && metrics && alternativeMetrics && <div className="route-comparison">
-              <p><strong>Best found within this bounded search.</strong> {comparison.qualifying_candidate_count} of {comparison.candidate_count} generated complete candidates had {comparisonLabel}. Both use {metrics.hub_count} hubs at {number(comparison.clearance_m, 2)} m cable clearance; hub positions and territory assignments may differ. {metrics.hub_count === result.lower_bound_hubs ? 'The hub count is proven minimal.' : 'The hub count is best known.'} A global minimum J is not proven.</p>
+              <p><strong>Best found within this bounded search.</strong> {comparison.alternative_search_hub_count !== null ? <>The selected {metrics.hub_count}-hub search generated {comparison.candidate_count} complete candidates and found no {comparisonLabel} route. A separate {comparison.alternative_search_hub_count}-hub search generated {comparison.alternative_search_candidate_count} complete candidates; {comparison.alternative_search_qualifying_candidate_count} had {comparisonLabel}. </> : <>{comparison.qualifying_candidate_count} of {comparison.candidate_count} generated complete candidates had {comparisonLabel}. Both use {metrics.hub_count} hubs at </>}{number(comparison.clearance_m, 2)} m cable clearance; hub positions and territory assignments may differ. {metrics.hub_count === result.lower_bound_hubs ? 'The selected hub count is proven minimal.' : 'The selected hub count is best known.'} A global minimum J is not proven.</p>
               <div className="route-table-wrap"><table><caption>Checked route metrics</caption><thead><tr><th scope="col">Metric</th><th scope="col">Selected</th><th scope="col">Alternative</th></tr></thead><tbody>{comparisonRows.map(([label, selectedValue, alternativeValue]) => <tr key={label}><th scope="row">{label}</th><td>{selectedValue}</td><td>{alternativeValue}</td></tr>)}</tbody></table></div>
               <div className="route-difference">Alternative J − selected J <strong>{alternativeMetrics.route_cost - metrics.route_cost >= 0 ? '+' : ''}{number(alternativeMetrics.route_cost - metrics.route_cost, 4)}</strong></div>
               <div className="route-downloads"><button type="button" onClick={() => saveJson(`slide8_submission_${selected}_selected.json`, result.submission)} disabled={!result.submission}>DOWNLOAD SELECTED CHECKED JSON ↓</button><button type="button" onClick={() => saveJson(`slide8_submission_${selected}_alternative.json`, alternative.submission)}>DOWNLOAD ALTERNATIVE CHECKED JSON ↓</button></div>

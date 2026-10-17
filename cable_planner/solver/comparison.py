@@ -43,11 +43,15 @@ class ComparisonResult:
     candidate_count: int
     qualifying_candidate_count: int
     clearance_m: float
+    alternative_search_hub_count: Optional[int] = None
+    alternative_search_candidate_count: int = 0
+    alternative_search_qualifying_candidate_count: int = 0
 
 
 def solve_with_comparison(
     plan: Dict[str, Any], *, cable_wall_clearance_m: float = grid_router.CABLE_WALL_CLEARANCE_M,
     progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
+    alternative_hub_count: Optional[int] = None,
 ) -> ComparisonResult:
     """Return the unchanged selected solution and its best found clean comparator.
 
@@ -109,6 +113,17 @@ def solve_with_comparison(
     key = (clearance, len(selected.get("hubs", [])))
     choice = (key, criterion) if criterion is not None else None
     alternative_data = best.get(choice) if choice is not None else None
+    alternative_key: Optional[CandidateKey] = None
+    if (criterion is not None and alternative_data is None and alternative_hub_count is not None
+            and alternative_hub_count > key[1]):
+        grid_router._solve_with_clearance(
+            plan,
+            cable_wall_clearance_m=clearance,
+            minimum_hub_count=alternative_hub_count,
+            candidate_observer=lambda candidate, _clearance: observe(candidate, clearance),
+        )
+        alternative_key = (clearance, alternative_hub_count)
+        alternative_data = best.get((alternative_key, criterion))
     return ComparisonResult(
         selected=selected,
         selected_report=selected_report,
@@ -118,4 +133,9 @@ def solve_with_comparison(
         candidate_count=counts.get(key, 0),
         qualifying_candidate_count=qualifying.get(choice, 0) if choice else 0,
         clearance_m=clearance,
+        alternative_search_hub_count=alternative_hub_count if alternative_key is not None else None,
+        alternative_search_candidate_count=counts.get(alternative_key, 0) if alternative_key else 0,
+        alternative_search_qualifying_candidate_count=(
+            qualifying.get((alternative_key, criterion), 0) if alternative_key and criterion else 0
+        ),
     )

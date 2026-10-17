@@ -541,6 +541,7 @@ def _solve_with_clearance(
     plan: Dict[str, Any],
     *,
     cable_wall_clearance_m: float,
+    minimum_hub_count: int | None = None,
     progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
     clearance_attempt: int = 1,
     candidate_observer: Optional[Callable[[Dict[str, Any], float], None]] = None,
@@ -617,12 +618,14 @@ def _solve_with_clearance(
             "routing_grid_edges": router.graph.number_of_edges(),
         })
 
-    # Try hub counts starting from lower_bound
+    # Try hub counts starting from the capacity lower bound. A caller may request
+    # a higher fixed count for an explicitly labelled comparison route.
     observer = (
         (lambda candidate: candidate_observer(candidate, cable_wall_clearance_m))
         if candidate_observer is not None else None
     )
-    for hub_count in range(lower_bound, len(rooms) + 1):
+    start_hub_count = max(lower_bound, minimum_hub_count or lower_bound)
+    for hub_count in range(start_hub_count, len(rooms) + 1):
         search_kwargs = {}
         if progress_callback is not None:
             progress_callback("search", {"current_hub_count": hub_count, "hub_count_attempts": 1})
