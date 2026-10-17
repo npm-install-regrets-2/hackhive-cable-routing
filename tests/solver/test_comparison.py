@@ -64,9 +64,9 @@ def test_penalized_plan_without_qualifying_candidate():
 
 def test_overlap_only_selection_chooses_zero_overlap(monkeypatch):
     plan = bundled_plan(12014)
-    selected = {"plan_id": plan["id"], "status": "feasible", "hubs": [{"id": "hub:1"}]}
+    selected = json.loads((ROOT / "examples/outputs/kaggle_12014_combined.json").read_text())["solution"]
     alternative = copy.deepcopy(selected)
-    alternative["marker"] = "zero-overlap"
+    alternative["diagnostics"][0]["code"] = "ZERO_OVERLAP_TEST"
 
     def fake_solve(_plan, *, cable_wall_clearance_m, candidate_observer):
         candidate_observer(copy.deepcopy(selected), cable_wall_clearance_m)
@@ -74,7 +74,7 @@ def test_overlap_only_selection_chooses_zero_overlap(monkeypatch):
         return selected, cable_wall_clearance_m
 
     def fake_metrics(_plan, solution):
-        overlap = 0 if solution.get("marker") else 2
+        overlap = 0 if solution["diagnostics"][0]["code"] == "ZERO_OVERLAP_TEST" else 2
         return RecomputedMetrics(1, 10, 0, overlap, 2, 11 + overlap, 0)
 
     def fake_validate(self, _plan, solution):
@@ -87,5 +87,5 @@ def test_overlap_only_selection_chooses_zero_overlap(monkeypatch):
     result = solve_with_comparison(plan)
 
     assert result.criterion == "zero_overlap"
-    assert result.alternative["marker"] == "zero-overlap"
+    assert result.alternative["diagnostics"][0]["code"] == "ZERO_OVERLAP_TEST"
     assert result.qualifying_candidate_count == 1

@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 from typing import Any, Dict, Literal, Optional
+
+from jsonschema import Draft202012Validator
 
 from cable_planner.metrics.calculator import calculate_all_metrics
 from cable_planner.solver import grid_router
@@ -13,6 +17,9 @@ from cable_planner.validation.models import ValidationReport
 
 Criterion = Literal["zero_crossings", "zero_overlap"]
 CandidateKey = tuple[float, int]
+_SCHEMA = Draft202012Validator(json.loads(
+    (Path(__file__).resolve().parents[2] / "shared/schema/common.schema.json").read_text(encoding="utf-8")
+))
 
 
 @dataclass(frozen=True)
@@ -66,6 +73,8 @@ def solve_with_comparison(
                 continue
             candidate["status"] = "feasible" if key[1] == lower_bound else "best_known"
             candidate["lower_bound_hubs"] = lower_bound
+            if not _SCHEMA.is_valid({"schema_version": "0.1.0", "plan": plan, "solution": candidate}):
+                continue
             report = IndependentValidator().validate(plan, candidate)
             if report.is_valid and report.recomputed_metrics is not None:
                 checked = report.recomputed_metrics
