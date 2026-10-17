@@ -1,0 +1,151 @@
+{
+  "plan_id": "12014",
+  "units": "m",
+  "hubs": [
+    {
+      "hub_id": "hub:1",
+      "room_id": "room:bedroom:000",
+      "location": {
+        "x": 6.081,
+        "y": 4.404
+      },
+      "assigned_rooms": [
+        "room:bedroom:000",
+        "room:kitchen:000",
+        "room:living:000"
+      ],
+      "assigned_nodes": [
+        "node:bedroom:000",
+        "node:kitchen:000",
+        "node:living:000"
+      ],
+      "closed_sequence": [
+        "hub:1",
+        "node:bedroom:000",
+        "node:kitchen:000",
+        "node:living:000",
+        "hub:1"
+      ],
+      "route_segments": [
+        {
+          "from": "hub:1",
+          "to": "node:bedroom:000",
+          "length_m": 0.6,
+          "polyline": [
+            [
+              6.081,
+              4.404
+            ],
+            [
+              6.681,
+              4.404
+            ],
+            [
+              6.681,
+              4.403
+            ]
+          ]
+        },
+        {
+          "from": "node:bedroom:000",
+          "to": "node:kitchen:000",
+          "length_m": 8.91,
+          "polyline": [
+            [
+              6.681,
+              4.403
+            ],
+            [
+              6.681,
+              4.404
+            ],
+            [
+              6.681,
+              2.661
+            ],
+            [
+              1.777,
+              2.661
+            ],
+            [
+              1.777,
+              3.682
+            ],
+            [
+              0.802,
+              3.682
+            ],
+            [
+              0.802,
+              3.949
+            ],
+            [
+              0.801,
+              3.949
+            ]
+          ]
+        },
+        {
+          "from": "node:kitchen:000",
+          "to": "node:living:000",
+          "length_m": 2.687,
+          "polyline": [
+            [
+              0.801,
+              3.949
+            ],
+            [
+              0.802,
+              3.949
+            ],
+            [
+              0.802,
+              4.197
+            ],
+            [
+              3.24,
+              4.197
+            ]
+          ]
+        },
+        {
+          "from": "node:living:000",
+          "to": "hub:1",
+          "length_m": 5.264,
+          "polyline": [
+            [
+              3.24,
+              4.197
+            ],
+            [
+              3.239,
+              4.197
+            ],
+            [
+              3.239,
+              3.09
+            ],
+            [
+              6.081,
+              3.09
+            ],
+            [
+              6.081,
+              4.404
+            ]
+          ]
+        }
+      ],
+      "ring_length_m": 17.46
+    }
+  ],
+  "reported_metrics": {
+    "hub_count": 1,
+    "total_length_m": 17.46,
+    "crossings": 0,
+    "overlap_m": 0.0,
+    "bends": 10,
+    "route_cost": 22.46,
+    "area_gap_m2": 0.0
+  }
+}

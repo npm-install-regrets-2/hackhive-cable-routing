@@ -38,7 +38,11 @@ The runtime panel reports server load, normalization, solve, validation, and ren
 
 After a run, download a complete PDF report with the input and checked-output images, checked metrics, diagnostics, timings, development JSON, provisional submission JSON, architecture data, and run metadata. The two standalone JSON downloads remain available: **Development Plan + Solution** follows `shared/schema/common.schema.json` in drawing units; **Slide 8 submission · provisional** follows the slide example in metres with a lower-left origin and is offered only when independent validation passes. The organizers have not published a complete machine-readable submission schema, so this export must be reviewed against any newer organizer contract before submission.
 
-The earlier Streamlit interface remains in `cable_planner/demo/app.py` for repository history; the React demo above is the local dataset workflow.
+The React demo above is the local dataset workflow.
+
+## Streamlit judge comparison
+
+[Hosted Streamlit app](https://hackhive-cable-planner.streamlit.app/) (deployment of this branch pending). The Streamlit interface in `cable_planner/demo/app.py` runs checked-in example plans 12014, 8063, 4944, 8061, 13033, and 14433. Plans 12014 and 8063 are quick clean-ring examples. For penalized routes, it shows the best found independently checked zero-crossing or zero-overlap alternative when the bounded search finds one. Plan 4944 illustrates a lower-cost route with a crossing beside a higher-cost zero-crossing route; 8061 illustrates a search with no qualifying alternative found.
 
 ## Layout
 

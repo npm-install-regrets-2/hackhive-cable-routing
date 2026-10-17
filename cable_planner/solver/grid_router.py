@@ -451,6 +451,19 @@ def solve(
     progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
 ) -> Dict[str, Any]:
     """Solve with the requested cable-wall clearance, relaxing it only if infeasible."""
+    solution, _ = _solve_observed(
+        plan, cable_wall_clearance_m=cable_wall_clearance_m,
+        progress_callback=progress_callback,
+    )
+    return solution
+
+
+def _solve_observed(
+    plan: Dict[str, Any], *, cable_wall_clearance_m: float = CABLE_WALL_CLEARANCE_M,
+    progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
+    candidate_observer: Optional[Callable[[Dict[str, Any], float], None]] = None,
+) -> Tuple[Dict[str, Any], float]:
+    """Run the usual clearance ladder and optionally observe complete candidates."""
     if progress_callback is not None:
         observer = progress_callback
         batch_sizes = {
@@ -507,21 +520,21 @@ def solve(
         flush_final_progress = lambda: None
     ladder = [cable_wall_clearance_m] + [c for c in CABLE_WALL_CLEARANCE_FALLBACKS_M if c < cable_wall_clearance_m]
     solution: Dict[str, Any] = {}
+    used_clearance = ladder[-1]
     try:
         for attempt, clearance in enumerate(ladder, start=1):
-            if progress_callback is None:
-                solution = _solve_with_clearance(plan, cable_wall_clearance_m=clearance)
-            else:
-                solution = _solve_with_clearance(
-                    plan, cable_wall_clearance_m=clearance,
-                    progress_callback=progress_callback,
-                    clearance_attempt=attempt,
-                )
+            used_clearance = clearance
+            kwargs = {}
+            if progress_callback is not None:
+                kwargs.update(progress_callback=progress_callback, clearance_attempt=attempt)
+            if candidate_observer is not None:
+                kwargs["candidate_observer"] = candidate_observer
+            solution = _solve_with_clearance(plan, cable_wall_clearance_m=clearance, **kwargs)
             if solution.get("status") != "infeasible":
                 break
     finally:
         flush_final_progress()
-    return solution
+    return solution, used_clearance
 
 
 def _solve_with_clearance(
@@ -530,6 +543,7 @@ def _solve_with_clearance(
     cable_wall_clearance_m: float,
     progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
     clearance_attempt: int = 1,
+    candidate_observer: Optional[Callable[[Dict[str, Any], float], None]] = None,
 ) -> Dict[str, Any]:
     """
     Main entry point for capacity-constrained rectilinear closed-ring optimization.
@@ -604,17 +618,21 @@ def _solve_with_clearance(
         })
 
     # Try hub counts starting from lower_bound
+    observer = (
+        (lambda candidate: candidate_observer(candidate, cable_wall_clearance_m))
+        if candidate_observer is not None else None
+    )
     for hub_count in range(lower_bound, len(rooms) + 1):
-        if progress_callback is None:
-            sol = _solve_fixed_hub_count(
-                plan, rooms, nodes, candidates, portal_graph, router, hub_count, max_nodes, max_area
-            )
-        else:
+        search_kwargs = {}
+        if progress_callback is not None:
             progress_callback("search", {"current_hub_count": hub_count, "hub_count_attempts": 1})
-            sol = _solve_fixed_hub_count(
-                plan, rooms, nodes, candidates, portal_graph, router, hub_count, max_nodes, max_area,
-                progress_callback=progress_callback,
-            )
+            search_kwargs["progress_callback"] = progress_callback
+        if observer is not None:
+            search_kwargs["candidate_observer"] = observer
+        sol = _solve_fixed_hub_count(
+            plan, rooms, nodes, candidates, portal_graph, router, hub_count, max_nodes, max_area,
+            **search_kwargs,
+        )
         if sol is not None:
             sol["status"] = "feasible" if hub_count == lower_bound else "best_known"
             sol["lower_bound_hubs"] = lower_bound
@@ -642,6 +660,7 @@ def _solve_fixed_hub_count(
     max_nodes: int,
     max_area: float,
     progress_callback: Optional[Callable[[str, Dict[str, int]], None]] = None,
+    candidate_observer: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Compare feasible partitions by full route cost, then assigned-area gap."""
     room_by_id = {r["id"]: r for r in rooms}
@@ -707,6 +726,8 @@ def _solve_fixed_hub_count(
                     ],
                 }
                 rank = _fixed_hub_solution_rank(sol_dict, room_by_id, plan, scale)
+                if candidate_observer is not None:
+                    candidate_observer(copy.deepcopy(sol_dict))
                 if rank < best_rank:
                     best_rank, best_solution = rank, sol_dict
         if best_solution is not None:
@@ -792,6 +813,8 @@ def _solve_fixed_hub_count(
                     ],
                 }
                 rank = _fixed_hub_solution_rank(sol_dict, room_by_id, plan, scale)
+                if candidate_observer is not None:
+                    candidate_observer(copy.deepcopy(sol_dict))
                 if rank < best_rank:
                     best_rank, best_solution = rank, sol_dict
 
