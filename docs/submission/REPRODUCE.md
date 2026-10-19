@@ -1,6 +1,6 @@
 # Reproduce the PS4 demo
 
-This package was generated from the local `feat/judge-route-comparison-current` branch of [the Cable Ring Planner repository](https://github.com/npm-install-regrets-2/hackhive-cable-routing). Use the PR branch for the judge-comparison features until it is reviewed and merged.
+This package was generated from the [`feat/judge-route-comparison-current` branch](https://github.com/npm-install-regrets-2/hackhive-cable-routing/tree/feat/judge-route-comparison-current) of [the Cable Ring Planner repository](https://github.com/npm-install-regrets-2/hackhive-cable-routing). [Review PR #7](https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7) contains the judge-comparison features and this report package. Use that branch until it is reviewed and merged.
 
 1. From the repository root, install Python 3.11+ dependencies with `uv venv .venv` and `uv pip install --python .venv/Scripts/python.exe -e .`.
 2. Install the frontend with `npm --prefix frontend ci`.

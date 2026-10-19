@@ -353,3 +353,13 @@
 - Open: dataset README/LICENSE and Croissant license fields conflict; fixed organizer nodes and final submission schema remain unavailable; dataset link alone may not satisfy the OneDrive upload requirement
 - Next: obtain teammate review and resolve any comments before merge or deployment
 - Commit/PR: `bcb2a2f`; https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7
+
+## 2026-10-19 — Surface repository links in the PS4 package
+
+- Status: done; PR update pending push
+- Changed: `docs/submission/README.md`, `REPRODUCE.md`, `report.md`, and regenerated PDF/ZIP
+- Why: the repository link was buried in reproduction instructions; put the repository and review PR on the ZIP landing page and PDF cover
+- Checked: rebuilt the three-page PDF and ZIP; visually inspected the cover; verified both PDF hyperlink annotations and the ZIP README URLs; ZIP integrity and `git diff --check` passed
+- Open: none beyond the dataset and organizer-contract questions above
+- Next: push the PR update for teammate review
+- Commit/PR: https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7

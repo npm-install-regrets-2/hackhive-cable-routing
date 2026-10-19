@@ -4,6 +4,8 @@
 
 **Team:** npminstallregrets | **Package:** npminstallregrets_PS4 | **State:** local judge-comparison branch, 19 October 2026
 
+**GitHub:** [Project repository](https://github.com/npm-install-regrets-2/hackhive-cable-routing) | [Submission and code review PR #7](https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7)
+
 We built a floor-plan planner that chooses hub locations, assigns eligible rooms to connected territories, routes a closed cable ring through every assigned node, and independently checks the result. The input is the ResPlan dataset supplied for the hackathon. Our contribution is the challenge-specific normalization, solver, checker, visual demo, and export pipeline.
 
 **What the prototype demonstrates.** On selected real ResPlan plans, the checker accepts complete solutions with the minimum hub count implied by the area and node capacities. Within that hub count, the solver searches for a low weighted cable cost. The displayed route cost is best found within a bounded search; global route-cost optimality is not claimed.
