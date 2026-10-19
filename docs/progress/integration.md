@@ -353,3 +353,33 @@
 - Open: dataset README/LICENSE and Croissant license fields conflict; fixed organizer nodes and final submission schema remain unavailable; dataset link alone may not satisfy the OneDrive upload requirement
 - Next: obtain teammate review and resolve any comments before merge or deployment
 - Commit/PR: `bcb2a2f`; https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7
+
+## 2026-10-19 — Surface repository links in the PS4 package
+
+- Status: done; PR update pending push
+- Changed: `docs/submission/README.md`, `REPRODUCE.md`, `report.md`, and regenerated PDF/ZIP
+- Why: the repository link was buried in reproduction instructions; put the repository and review PR on the ZIP landing page and PDF cover
+- Checked: rebuilt the three-page PDF and ZIP; visually inspected the cover; verified both PDF hyperlink annotations and the ZIP README URLs; ZIP integrity and `git diff --check` passed
+- Open: none beyond the dataset and organizer-contract questions above
+- Next: push the PR update for teammate review
+- Commit/PR: https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7
+
+## 2026-10-19 — Simplify the PS4 PDF cover
+
+- Status: done; review PR update pending push
+- Changed: `docs/submission/report.md`, regenerated PDF and ZIP
+- Why: remove the review PR link and local branch/date state from the report cover in response to PDF review comments; retain the project repository link
+- Checked: rebuilt PDF and ZIP; visually inspected the cover; PDF has three pages, only the repository hyperlink remains, removed text is absent, and the ZIP passes integrity and embedded-PDF checks
+- Open: none
+- Next: push the updated report to the review PR
+- Commit/PR: https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7
+
+## 2026-10-19 — Add original ResPlan files to the PS4 ZIP
+
+- Status: follow-up PR #8 open for teammate review; OneDrive upload still outstanding
+- Changed: package builder, report and dataset notes, reproduction guide, root README, generated PDF/manifest/ZIP
+- Why: the team requested the same supplied `archive/` folder in the existing submission ZIP, alongside the project report and checked examples
+- Checked: builder validates the checked JSON and streams every source file into the ZIP, verifies inventory, archive CRCs, and SHA-256 equality; the large pickle uses ZIP LZMA compression to keep the single file at 87,888,513 bytes. Python extraction restored all nine source files, and the extracted pickle SHA-256 matched the original. Rendered and visually inspected all three PDF pages; `git diff --check` passed.
+- Open: dataset license metadata conflict, organizer-fixed nodes and final submission schema, and separate OneDrive dataset upload
+- Next: obtain another developer's review of PR #8, then merge it into `main`
+- Commit/PR: https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/8

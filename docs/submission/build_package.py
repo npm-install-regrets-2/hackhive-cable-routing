@@ -1,4 +1,4 @@
-"""Build the checked PS4 report and its small GitHub ZIP."""
+"""Build the checked PS4 report and combined dataset ZIP."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ from html import escape
 import json
 from pathlib import Path
 import re
-from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+import shutil
+from zipfile import ZIP_DEFLATED, ZIP_LZMA, ZipFile, ZipInfo
 
 import matplotlib.pyplot as plt
 from PIL import Image as PillowImage, ImageOps
@@ -33,6 +34,10 @@ OUT_DIR = ROOT / "submission"
 PDF = SOURCE / "npminstallregrets_PS4_report.pdf"
 ZIP = OUT_DIR / "npminstallregrets_PS4.zip"
 SCHEMA = ROOT / "shared" / "schema" / "common.schema.json"
+DATASET_FILES = (
+    "ResPlan.pkl", "split.json", "croissant.json", "LICENSE", "README.md",
+    "requirements.txt", "ResPlan_demo.ipynb", "resplan_utils.py", "TAKEDOWN.md",
+)
 
 
 def checked_bundle(plan_id: int, validator: Draft202012Validator):
@@ -158,9 +163,17 @@ def build_pdf():
 
 def add_to_zip(archive: ZipFile, source: Path, target: str):
     info = ZipInfo(target, date_time=(2026, 10, 19, 0, 0, 0))
-    info.compress_type = ZIP_DEFLATED
+    info.compress_type = ZIP_LZMA if target == "archive/ResPlan.pkl" else ZIP_DEFLATED
     info.external_attr = 0o644 << 16
-    archive.writestr(info, source.read_bytes())
+    with source.open("rb") as input_file, archive.open(info, "w") as output_file:
+        shutil.copyfileobj(input_file, output_file, length=1024 * 1024)
+
+
+def digest(stream):
+    checksum = sha256()
+    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        checksum.update(chunk)
+    return checksum.digest()
 
 
 def main():
@@ -234,11 +247,24 @@ def main():
         "examples/plan_4944_zero_crossings.json": alternate_path,
     }
     entries.update({f"images/{path.name}": path for path in sorted(ASSETS.glob("*.png"))})
+    dataset_dir = next(
+        (path for path in (ROOT / "archive", ROOT.parent / "archive")
+         if (path / "ResPlan.pkl").is_file()),
+        None,
+    )
+    if dataset_dir is None:
+        raise FileNotFoundError("Trusted ResPlan archive folder not found")
+    for name in DATASET_FILES:
+        source = dataset_dir / name
+        if not source.is_file():
+            raise FileNotFoundError(f"Missing supplied dataset file: {source}")
+        entries[f"archive/{name}"] = source
     manifest = ["# Package contents", "", "Team npminstallregrets | Honeywell PS4", "",
-                "The source dataset is linked in DATASET.md and is not inside this ZIP.", "",
+                "The supplied ResPlan source files are included under `archive/`.", "",
                 "| Path | SHA-256 |", "| --- | --- |"]
     for target, source in sorted(entries.items()):
-        manifest.append(f"| `{target}` | `{sha256(source.read_bytes()).hexdigest()}` |")
+        with source.open("rb") as input_file:
+            manifest.append(f"| `{target}` | `{digest(input_file).hex()}` |")
     manifest_path = SOURCE / "MANIFEST.md"
     manifest_path.write_text("\n".join(manifest) + "\n", encoding="utf-8")
     entries["MANIFEST.md"] = manifest_path
@@ -249,8 +275,9 @@ def main():
         if archive.testzip() is not None or set(archive.namelist()) != set(entries):
             raise ValueError("ZIP integrity or inventory check failed")
         for target, source in entries.items():
-            if sha256(archive.read(target)).digest() != sha256(source.read_bytes()).digest():
-                raise ValueError(f"ZIP checksum mismatch: {target}")
+            with archive.open(target) as packed_file, source.open("rb") as input_file:
+                if digest(packed_file) != digest(input_file):
+                    raise ValueError(f"ZIP checksum mismatch: {target}")
         for target in (name for name in entries if name.startswith("examples/")):
             bundle = json.loads(archive.read(target))
             validator.validate(bundle)

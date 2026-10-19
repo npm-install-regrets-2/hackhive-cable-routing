@@ -2,7 +2,9 @@
 
 ## Cable Ring Planner
 
-**Team:** npminstallregrets | **Package:** npminstallregrets_PS4 | **State:** local judge-comparison branch, 19 October 2026
+**Team:** npminstallregrets | **Package:** npminstallregrets_PS4
+
+**GitHub:** [Project repository](https://github.com/npm-install-regrets-2/hackhive-cable-routing)
 
 We built a floor-plan planner that chooses hub locations, assigns eligible rooms to connected territories, routes a closed cable ring through every assigned node, and independently checks the result. The input is the ResPlan dataset supplied for the hackathon. Our contribution is the challenge-specific normalization, solver, checker, visual demo, and export pipeline.
 
@@ -30,7 +32,7 @@ The source geometry uses drawing units. For each plan we derive drawing units pe
 
 The archive does not supply the challenge's fixed node coordinates. The checked examples therefore use deterministic **development fallback nodes**, labelled as such in the Plan JSON. An organizer-provided node set must replace them for a true organizer benchmark. The exact Kaggle version and the conflicting license metadata are recorded in DATASET.md.
 
-**Where the data goes:** raw archive -> `ingestion/normalize.py`; room and portal geometry -> `geometry/` and `solver/`; normalized Plan -> shared schema -> solver and independent checker; checked Plan + Solution -> figures, interactive demo, and export adapter. The raw pickle is deliberately absent from this report ZIP and Git repository.
+**Where the data goes:** raw archive -> `ingestion/normalize.py`; room and portal geometry -> `geometry/` and `solver/`; normalized Plan -> shared schema -> solver and independent checker; checked Plan + Solution -> figures, interactive demo, and export adapter. The original source files, including `ResPlan.pkl`, are included in this ZIP under `archive/`.
 
 ## 3. How the planner works
 
@@ -56,8 +58,8 @@ The archive does not supply the challenge's fixed node coordinates. The checked 
 
 Run the local FastAPI and React/Vite demo as described in REPRODUCE.md. Select bundled plan 4944 and press Run to see the source floor plan, chosen route, checked zero-crossing alternative, metrics, and JSON downloads. The interactive 3D viewer illustrates the checked geometry with schematic heights. Local plan ID 16416 demonstrates an explicitly requested two-hub clean alternative to a one-hub selected solution; hub count remains the primary competition objective.
 
-The ZIP includes schema-valid Plan + Solution examples for 12014, 8063, and 4944, plus the separately checked 4944 alternative. It includes the development schema for interpreting them. Provisional slide-8 exports and the final organizer schema are different contracts; use the repository exporter only after confirming the organizer's current requirements.
+The ZIP includes the supplied ResPlan archive, schema-valid Plan + Solution examples for 12014, 8063, and 4944, and the separately checked 4944 alternative. It includes the development schema for interpreting the examples. Provisional slide-8 exports and the final organizer schema are different contracts; use the repository exporter only after confirming the organizer's current requirements.
 
-**Limits:** this package documents selected development examples with fallback nodes, not a hidden-test score or proof that all raw ResPlan plans are feasible. The bounded search does not certify the globally smallest J. Some raw geometry fails normalization. The latest judge-comparison branch is being submitted for teammate review; it is not represented as already deployed. The supplied dataset link is provenance, not confirmation that a link alone satisfies the organizer's OneDrive upload instruction.
+**Limits:** this package documents selected development examples with fallback nodes, not a hidden-test score or proof that all raw ResPlan plans are feasible. The bounded search does not certify the globally smallest J. Some raw geometry fails normalization. The latest judge-comparison branch is being submitted for teammate review; it is not represented as already deployed. Including the dataset in this GitHub ZIP does not itself upload it to the organizer's OneDrive.
 
 **Sources:** Honeywell PS4 detailed slide deck and original problem statement supplied to the team; the project's PROJECT_PLAN.md and CONTEXT.md; ResPlan version 6 dataset metadata; checked Plan/Solution JSON and independent validation in this repository. See DATASET.md and REPRODUCE.md for exact paths and commands.
