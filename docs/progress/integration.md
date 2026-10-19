@@ -376,10 +376,10 @@
 
 ## 2026-10-19 — Add original ResPlan files to the PS4 ZIP
 
-- Status: packaged for review; OneDrive upload still outstanding
+- Status: follow-up PR #8 open for teammate review; OneDrive upload still outstanding
 - Changed: package builder, report and dataset notes, reproduction guide, root README, generated PDF/manifest/ZIP
 - Why: the team requested the same supplied `archive/` folder in the existing submission ZIP, alongside the project report and checked examples
 - Checked: builder validates the checked JSON and streams every source file into the ZIP, verifies inventory, archive CRCs, and SHA-256 equality; the large pickle uses ZIP LZMA compression to keep the single file at 87,888,513 bytes. Python extraction restored all nine source files, and the extracted pickle SHA-256 matched the original. Rendered and visually inspected all three PDF pages; `git diff --check` passed.
 - Open: dataset license metadata conflict, organizer-fixed nodes and final submission schema, and separate OneDrive dataset upload
-- Next: push PR #7 update for teammate review
-- Commit/PR: https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7
+- Next: obtain another developer's review of PR #8, then merge it into `main`
+- Commit/PR: https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/8
