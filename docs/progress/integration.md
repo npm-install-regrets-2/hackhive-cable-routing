@@ -343,3 +343,13 @@
 - Changed: permit an explicitly requested higher-hub-count comparison search while retaining the original selected minimum-hub solution. The Vite search requests a two-hub clean alternative for local plan 16416 and labels the different hub counts in the comparison explanation.
 - Why: plan 16416 has no zero-crossing candidate among its five one-hub candidates, but a two-hub route provides a checked no-crossing cable-management option.
 - Checked: selected route validates with H=1, X=1, J=58.6637. The additional H=2 search generated 12 complete candidates, all zero-crossing; its best found route validates with J=45.5685.
+
+## 2026-10-19 — Prepare Honeywell PS4 project report package
+
+- Status: done locally; review PR pending
+- Changed: `docs/submission/`, `submission/npminstallregrets_PS4.zip`, root README and PNG ignore exception
+- Why: explain the organizer-provided dataset, complete challenge approach, checked examples, and local judge-comparison feature in one small GitHub package without copying the 300 MB pickle
+- Checked: package builder validates included development JSON against the shared schema and independent checker; plan 4944's selected and clean-route metrics are asserted; rendered and visually inspected the three-page PDF; ZIP inventory and checksums verified
+- Open: dataset README/LICENSE and Croissant license fields conflict; fixed organizer nodes and final submission schema remain unavailable; dataset link alone may not satisfy the OneDrive upload requirement
+- Next: publish this branch for teammate review; do not merge before review
+- Commit/PR: pending
