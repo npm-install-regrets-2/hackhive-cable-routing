@@ -2,15 +2,24 @@
 
 Team npminstallregrets | Honeywell PS4
 
-The source dataset is linked in DATASET.md and is not inside this ZIP.
+The supplied ResPlan source files are included under `archive/`.
 
 | Path | SHA-256 |
 | --- | --- |
-| `DATASET.md` | `3f9e9799d4af2922b2472ff39b2088d836be4e865d75b76bf302e87d8bab7f17` |
-| `README.md` | `a57d2d57a813333dda621257f40e241a3df27bb79f6d91a0acb465c838102b82` |
-| `REPORT.pdf` | `3096aa310d20f6acea241b13432510dc9461a60131cab3c68bd03070aabc0309` |
-| `REPORT_SOURCE.md` | `51badfe82f86ac41269363dc264683bbda8df27d8d4214189789d91189ae055f` |
-| `REPRODUCE.md` | `75d3c0555d4f0aea073ff86f2d8da27d7dfcafce7dd878dcf9fce711ea497f89` |
+| `DATASET.md` | `7bc54cf2db591b1b6e330ec9586da8dae737063dc3974ab44f09b5ffb383a987` |
+| `README.md` | `04d683dc026d09333b9f53b9d1523e10b1951b8e79c960654b314b6ea578b148` |
+| `REPORT.pdf` | `80be6d8988a419613ed184a6d6b60d5795d9f32c84070ae39d4d1ffe77132b66` |
+| `REPORT_SOURCE.md` | `af6f77b5e967a2a3d034459c6c7ea36e41ed73fa942d0a9e82783c547fd41183` |
+| `REPRODUCE.md` | `9ec4f01bf1eaab17cd5ee35919c3fa9fe9e4c03a3dfb314a3e40552501c138c7` |
+| `archive/LICENSE` | `8193a93c99a3c2c576ee8d508a0098d7c90ead3bc6c23caabdbd84b1f93bf499` |
+| `archive/README.md` | `54ab251547a4d363bf884018032125bec1266ca40b27548d21b9a8d4bedd4373` |
+| `archive/ResPlan.pkl` | `2a73179cf11e6066384400494683072eb1648ed56ae000750d0e9f3fa499c570` |
+| `archive/ResPlan_demo.ipynb` | `c81b31eb73cdd10556a62a8614007988b56df0d1e948826709ed08d0c1a1c3fe` |
+| `archive/TAKEDOWN.md` | `bbf1a963957c6a815f6e1a33e189c11d7cc3061a9ecdd949c0d896d25dc452fd` |
+| `archive/croissant.json` | `a915ed5f14902e099c361e9a7d9da1acbf012bb0036bdc979755ad6422757c84` |
+| `archive/requirements.txt` | `1e870e7e022911825797c383080bb9a26b21d8de755c42908726a74f37c8d24a` |
+| `archive/resplan_utils.py` | `2f74d5e532663738c65d9d77391b668a1de94d711ac5e851021dc8798d356c2d` |
+| `archive/split.json` | `7761df4ad4c860d7e89d1ef9c7004737cd407615b66ed9cde676d7087108c9a7` |
 | `examples/plan_12014_checked.json` | `e5a24e3c5b1c2c59d8a1b7ec4a72b078f0535dc3373c9525d31fbca54e3fbe88` |
 | `examples/plan_4944_selected.json` | `d9346ab06f389ddc28606167aa20645b213a7a7b67b7aba4618123eb0140e550` |
 | `examples/plan_4944_zero_crossings.json` | `b2b81ba8f2b548a72c90d108fc0e2259043c8fdb5eae234721438352621ec458` |

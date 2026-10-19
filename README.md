@@ -1,6 +1,6 @@
 # Cable Ring Planner
 
-The illustrated Honeywell PS4 project report, dataset provenance note, checked examples, and reproduction guide are packaged in [`submission/npminstallregrets_PS4.zip`](submission/npminstallregrets_PS4.zip). The editable report and package builder are in [`docs/submission/`](docs/submission/). The raw ResPlan archive is linked in the package and is not included in this Git repository.
+The illustrated Honeywell PS4 project report, supplied ResPlan dataset files, checked examples, and reproduction guide are packaged in [`submission/npminstallregrets_PS4.zip`](submission/npminstallregrets_PS4.zip). The editable report and package builder are in [`docs/submission/`](docs/submission/). The large raw archive is stored inside the ZIP, not as separate tracked repository files.
 
 Normalize a trusted ResPlan floor plan, place the minimum feasible number of hubs, route one closed cable ring per hub, and independently verify the result. The solver minimizes hub count first, then `J = L + 5X + O + 0.5B`.
 
