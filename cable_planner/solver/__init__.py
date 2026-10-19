@@ -2,6 +2,7 @@
 
 from .thin_slice import solve as solve_thin_slice
 from .grid_router import hub_count_lower_bound, solve, HananRouter, find_legal_hub_candidates
+from .comparison import solve_with_comparison
 
 solve_grid_router = solve
 
@@ -10,6 +11,7 @@ __all__ = [
     "solve",
     "solve_thin_slice",
     "solve_grid_router",
+    "solve_with_comparison",
     "HananRouter",
     "find_legal_hub_candidates",
 ]

@@ -1,0 +1,223 @@
+{
+  "plan_id": "8063",
+  "units": "m",
+  "hubs": [
+    {
+      "hub_id": "hub:1",
+      "room_id": "room:bedroom:000",
+      "location": {
+        "x": 10.293,
+        "y": 8.793
+      },
+      "assigned_rooms": [
+        "room:bedroom:000"
+      ],
+      "assigned_nodes": [
+        "node:bedroom:000"
+      ],
+      "closed_sequence": [
+        "hub:1",
+        "node:bedroom:000",
+        "hub:1"
+      ],
+      "route_segments": [
+        {
+          "from": "hub:1",
+          "to": "node:bedroom:000",
+          "length_m": 1.2,
+          "polyline": [
+            [
+              10.293,
+              8.793
+            ],
+            [
+              9.694,
+              8.793
+            ],
+            [
+              9.694,
+              9.393
+            ]
+          ]
+        },
+        {
+          "from": "node:bedroom:000",
+          "to": "hub:1",
+          "length_m": 1.2,
+          "polyline": [
+            [
+              9.694,
+              9.393
+            ],
+            [
+              10.293,
+              9.393
+            ],
+            [
+              10.293,
+              8.793
+            ]
+          ]
+        }
+      ],
+      "ring_length_m": 2.4
+    },
+    {
+      "hub_id": "hub:2",
+      "room_id": "room:bedroom:001",
+      "location": {
+        "x": 3.232,
+        "y": 3.013
+      },
+      "assigned_rooms": [
+        "room:bedroom:001",
+        "room:kitchen:000",
+        "room:living:000"
+      ],
+      "assigned_nodes": [
+        "node:bedroom:001",
+        "node:kitchen:000",
+        "node:living:000"
+      ],
+      "closed_sequence": [
+        "hub:2",
+        "node:bedroom:001",
+        "node:living:000",
+        "node:kitchen:000",
+        "hub:2"
+      ],
+      "route_segments": [
+        {
+          "from": "hub:2",
+          "to": "node:bedroom:001",
+          "length_m": 0.6,
+          "polyline": [
+            [
+              3.232,
+              3.013
+            ],
+            [
+              3.232,
+              2.413
+            ],
+            [
+              3.232,
+              2.413
+            ]
+          ]
+        },
+        {
+          "from": "node:bedroom:001",
+          "to": "node:living:000",
+          "length_m": 6.98,
+          "polyline": [
+            [
+              3.232,
+              2.413
+            ],
+            [
+              3.232,
+              2.413
+            ],
+            [
+              4.699,
+              2.413
+            ],
+            [
+              4.699,
+              7.028
+            ],
+            [
+              5.405,
+              7.028
+            ],
+            [
+              5.405,
+              7.22
+            ],
+            [
+              5.406,
+              7.219
+            ]
+          ]
+        },
+        {
+          "from": "node:living:000",
+          "to": "node:kitchen:000",
+          "length_m": 6.419,
+          "polyline": [
+            [
+              5.406,
+              7.219
+            ],
+            [
+              5.405,
+              7.22
+            ],
+            [
+              5.405,
+              7.566
+            ],
+            [
+              2.864,
+              7.566
+            ],
+            [
+              2.864,
+              9.767
+            ],
+            [
+              1.534,
+              9.767
+            ],
+            [
+              1.534,
+              9.767
+            ]
+          ]
+        },
+        {
+          "from": "node:kitchen:000",
+          "to": "hub:2",
+          "length_m": 10.366,
+          "polyline": [
+            [
+              1.534,
+              9.767
+            ],
+            [
+              1.534,
+              9.767
+            ],
+            [
+              1.534,
+              7.028
+            ],
+            [
+              4.189,
+              7.028
+            ],
+            [
+              4.189,
+              3.013
+            ],
+            [
+              3.232,
+              3.013
+            ]
+          ]
+        }
+      ],
+      "ring_length_m": 24.365
+    }
+  ],
+  "reported_metrics": {
+    "hub_count": 2,
+    "total_length_m": 26.765,
+    "crossings": 0,
+    "overlap_m": 0.0,
+    "bends": 16,
+    "route_cost": 34.765,
+    "area_gap_m2": 66.533
+  }
+}

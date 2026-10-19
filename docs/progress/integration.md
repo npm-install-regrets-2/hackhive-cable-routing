@@ -311,3 +311,45 @@
 - Open: none.
 - Next: none.
 - Commit/PR: pending
+
+## 2026-10-17 — Compare checked penalized and clean route candidates
+
+- Status: implemented on isolated `feat/judge-route-comparison-current` branch; review and deployment pending.
+- Changed: `cable_planner/solver/comparison.py`, `grid_router.py`, Streamlit app, focused solver and app tests, README and judge-demo notes. Added bundled examples for 12014, 8063, 4944, and 8061 from the earlier demo selection pass.
+- Why: show judges that plan 4944's selected one-crossing route has lower checked J than the best zero-crossing complete solution found in the same bounded search, while preserving the existing Solution JSON contract.
+- Checked: the full suite on current `main` passed in the branch's locked environment (78 tests, one dependency deprecation warning). Plan 4944 yielded nine complete candidates, two zero-crossing; checked J values were 45.0814 and 48.4531. The latest solver progress callback and comparison observer coexist in the same search.
+- Open: public GitHub publication was declined by the user, so teammate PR review, hosted deployment, and hosted rehearsal remain pending.
+- Next: keep the feature local; request fresh approval only if publication is later desired.
+- Commit/PR: local task commits `2d9fbc1`, `d3b13d1`, and `902f52e`; no PR.
+
+## 2026-10-17 — Move judge comparison to the Vite demo
+
+- Status: implemented and checked locally.
+- Changed: restored the Streamlit app to its prior behavior and connected `solve_with_comparison` to the FastAPI run endpoint and Vite/React UI. Added bundled normalized plan 4944, a same-run comparison payload, two checked overlays, metric table, J difference, alternative availability message, and separate checked JSON downloads. The existing `solve` output and shared schema remain unchanged.
+- Why: the judge presentation is in the Vite demo. The user confirmed the work must remain local, so no public push or hosted deployment is planned.
+- Checked: a real 4944 API run returned nine complete candidates, two zero-crossing candidates, and independently checked J values 45.0814 and 48.4531. A local headless Edge run clicked **Run plan 4944** in Vite, loaded both overlays, and displayed the checked table, +3.3717 J difference, and two download buttons. Full Python suite passed (74 tests, one dependency deprecation warning); frontend production build and three frontend tests passed; `git diff --check` passed.
+- Open: teammate review and hosted rehearsal require later publication authorization.
+
+## 2026-10-17 — Show total floor-plan area in Vite
+
+- Status: implemented locally.
+- Changed: the Vite floor-plan workspace now shows the area inside the plan's internal boundary, less holes, converted from drawing units to m². Kept the separate area-gap metric so the two measurements are distinguishable.
+- Why: the existing room labels and area gap did not show one total for the whole floor plan.
+- Checked: a polygon-with-hole unit test covers boundary subtraction and unit conversion; four frontend tests and the production build passed. Plan 4944's footprint calculates to 121.888736 m², displayed as 121.89 m².
+
+## 2026-10-17 — Add 16416 cable-management comparison
+
+- Status: implemented locally; focused regression and Vite build in progress.
+- Changed: permit an explicitly requested higher-hub-count comparison search while retaining the original selected minimum-hub solution. The Vite search requests a two-hub clean alternative for local plan 16416 and labels the different hub counts in the comparison explanation.
+- Why: plan 16416 has no zero-crossing candidate among its five one-hub candidates, but a two-hub route provides a checked no-crossing cable-management option.
+- Checked: selected route validates with H=1, X=1, J=58.6637. The additional H=2 search generated 12 complete candidates, all zero-crossing; its best found route validates with J=45.5685.
+
+## 2026-10-19 — Prepare Honeywell PS4 project report package
+
+- Status: published for teammate review; not merged or deployed
+- Changed: `docs/submission/`, `submission/npminstallregrets_PS4.zip`, root README and PNG ignore exception
+- Why: explain the organizer-provided dataset, complete challenge approach, checked examples, and local judge-comparison feature in one small GitHub package without copying the 300 MB pickle
+- Checked: package builder validates included development JSON against the shared schema and independent checker; plan 4944's selected and clean-route metrics are asserted; rendered and visually inspected the three-page PDF; ZIP inventory and checksums verified
+- Open: dataset README/LICENSE and Croissant license fields conflict; fixed organizer nodes and final submission schema remain unavailable; dataset link alone may not satisfy the OneDrive upload requirement
+- Next: obtain teammate review and resolve any comments before merge or deployment
+- Commit/PR: `bcb2a2f`; https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7

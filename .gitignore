@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .pytest-route-*/
 *.png
+!docs/submission/assets/*.png
 *.pkl
 archive/
 .uv-cache/

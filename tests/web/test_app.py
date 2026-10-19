@@ -28,13 +28,13 @@ def _saved(plan_id: int) -> dict:
     return json.loads((ROOT / "examples" / "outputs" / f"kaggle_{plan_id}_combined.json").read_text(encoding="utf-8"))
 
 
-def test_bundled_catalog_and_all_three_previews():
+def test_bundled_catalog_and_all_four_previews():
     catalog = client.get("/api/catalog").json()
-    assert [item["id"] for item in catalog["presets"]] == [14433, 13033, 14926]
-    assert catalog["total"] == 3
+    assert [item["id"] for item in catalog["presets"]] == [4944, 14433, 13033, 14926]
+    assert catalog["total"] == 4
     schema = json.loads((ROOT / "shared" / "schema" / "common.schema.json").read_text(encoding="utf-8"))
     plan_validator = jsonschema.Draft202012Validator({"$defs": schema["$defs"], "$ref": "#/$defs/plan"})
-    for plan_id in (14433, 13033, 14926):
+    for plan_id in (4944, 14433, 13033, 14926):
         plan = json.loads((ROOT / "examples" / "inputs" / f"plan_{plan_id}.json").read_text(encoding="utf-8"))
         assert plan["id"] == str(plan_id)
         assert plan_validator.is_valid(plan)
@@ -173,6 +173,41 @@ def test_streamed_run_reports_real_stages_and_preserves_sync_result(monkeypatch)
     for key in ("partition_patterns_examined", "ring_route_attempts", "candidate_combinations_evaluated"):
         observed = [event["counters"][key] for event in progress_events if key in event["counters"]]
         assert observed == sorted(observed)
+
+
+def test_streamed_4944_includes_checked_side_by_side_comparison():
+    response = client.post("/api/runs/stream", json={"source": "bundled", "plan_id": 4944, "compare": True})
+    assert response.status_code == 200, response.text
+    terminal = [json.loads(line) for line in response.text.splitlines() if line.strip()][-1]
+    assert terminal["type"] == "complete", terminal
+    result = terminal["result"]
+    comparison = result["comparison"]
+    assert (comparison["candidate_count"], comparison["qualifying_candidate_count"]) == (9, 2)
+    assert comparison["criterion"] == "zero_crossings"
+    assert result["validation"]["recomputed_metrics"]["route_cost"] == 45.0814
+    alternative = comparison["alternative"]
+    assert alternative["validation"]["is_valid"]
+    assert alternative["validation"]["recomputed_metrics"]["route_cost"] == 48.4531
+    assert alternative["validation"]["recomputed_metrics"]["crossings"] == 0
+    assert alternative["output_image"].startswith("data:image/png;base64,")
+    assert result["output_image"].startswith("data:image/png;base64,")
+    assert result["submission"]["reported_metrics"]["route_cost"] == 45.081
+    assert alternative["submission"]["reported_metrics"]["route_cost"] == 48.453
+    schema = json.loads((ROOT / "shared/schema/common.schema.json").read_text(encoding="utf-8"))
+    validator = jsonschema.Draft202012Validator(schema)
+    validator.validate(result["development"])
+    validator.validate(alternative["development"])
+
+
+def test_comparison_without_alternative_reports_search_limit(monkeypatch):
+    saved = _saved(8061)
+    monkeypatch.setattr(web, "_load_plan", lambda *_args, **_kwargs: (saved["plan"], {"load_s": 0.0, "normalize_s": None}))
+    result = client.post("/api/runs", json={"source": "bundled", "plan_id": 8061, "compare": True}).json()
+    assert result["validation"]["is_valid"]
+    assert result["comparison"]["criterion"] == "zero_crossings"
+    assert result["comparison"]["candidate_count"] == 9
+    assert result["comparison"]["qualifying_candidate_count"] == 0
+    assert result["comparison"]["alternative"] is None
 
 
 def test_streamed_solver_failure_identifies_active_stage(monkeypatch):
