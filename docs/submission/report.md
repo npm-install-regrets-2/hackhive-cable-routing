@@ -2,9 +2,9 @@
 
 ## Cable Ring Planner
 
-**Team:** npminstallregrets | **Package:** npminstallregrets_PS4 | **State:** local judge-comparison branch, 19 October 2026
+**Team:** npminstallregrets | **Package:** npminstallregrets_PS4
 
-**GitHub:** [Project repository](https://github.com/npm-install-regrets-2/hackhive-cable-routing) | [Submission and code review PR #7](https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7)
+**GitHub:** [Project repository](https://github.com/npm-install-regrets-2/hackhive-cable-routing)
 
 We built a floor-plan planner that chooses hub locations, assigns eligible rooms to connected territories, routes a closed cable ring through every assigned node, and independently checks the result. The input is the ResPlan dataset supplied for the hackathon. Our contribution is the challenge-specific normalization, solver, checker, visual demo, and export pipeline.
 

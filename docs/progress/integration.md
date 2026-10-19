@@ -363,3 +363,13 @@
 - Open: none beyond the dataset and organizer-contract questions above
 - Next: push the PR update for teammate review
 - Commit/PR: https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7
+
+## 2026-10-19 — Simplify the PS4 PDF cover
+
+- Status: done; review PR update pending push
+- Changed: `docs/submission/report.md`, regenerated PDF and ZIP
+- Why: remove the review PR link and local branch/date state from the report cover in response to PDF review comments; retain the project repository link
+- Checked: rebuilt PDF and ZIP; visually inspected the cover; PDF has three pages, only the repository hyperlink remains, removed text is absent, and the ZIP passes integrity and embedded-PDF checks
+- Open: none
+- Next: push the updated report to the review PR
+- Commit/PR: https://github.com/npm-install-regrets-2/hackhive-cable-routing/pull/7
